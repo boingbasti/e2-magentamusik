@@ -426,7 +426,7 @@ def _build_skin():
         '<widget name="header_logo" position="{lx},{ly}" size="{lw},{lh}" '
         'zPosition="4" alphatest="blend" transparent="1" scale="1"/>'
         '<widget name="title" position="{tpx},{ty}" size="{ttw},{th}" '
-        'zPosition="4" backgroundColor="#0A000000" font="Regular;{tfs}" halign="left" '
+        'zPosition="4" backgroundColor="#0A000000" font="Regular;{tfs}" halign="left" noWrap="1" '
         'valign="center" foregroundColor="#00cc0066"/>'
         '<widget name="status" position="{stx},{ty}" size="{stw},{th}" '
         'zPosition="4" backgroundColor="#0A000000" font="Regular;{sfs}" halign="right" noWrap="1" '
