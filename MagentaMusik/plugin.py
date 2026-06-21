@@ -1086,15 +1086,55 @@ def _queue_next():
         _queue_next()
 
 
+# Referenzzaehler statt einfachem Bool, da es bei uns (anders als OeMediathek
+# mit nur einem MainScreen) zwei verschachtelte Screen-Klassen gibt
+# (Festival- und Items-Screen, beide von _BrowseScreenBase): wenn man aus
+# einem Festival zurueck zur Liste geht, schliesst nur der innere Screen,
+# das Plugin als Ganzes bleibt offen. Erst wenn der letzte _BrowseScreenBase
+# schliesst, ist das Plugin wirklich verlassen.
+_open_screen_count   = 0
+_notify_title_timers = []
+
+
+def _plugin_is_open():
+    return _open_screen_count > 0
+
+
 def _fire_download_notification():
+    if _plugin_is_open():
+        return
     try:
-        from Tools.Notifications import AddPopup
-        AddPopup("Alle Downloads abgeschlossen", _MessageBox.TYPE_INFO, timeout=5, id="magentamusik_dl_done")
+        from Tools.Notifications import AddPopup, current_notifications
+        _id = "magentamusik_dl_done"
+        AddPopup("Alle Downloads abgeschlossen", _MessageBox.TYPE_INFO, timeout=5, id=_id)
+
+        # AddPopup zeigt im Titel standardmaessig "Enigma2" o.ae. an - die
+        # Notification traegt ihren eigenen Titel erst, NACHDEM sie tatsaechlich
+        # in current_notifications gelandet ist, daher ein kurzer Timer statt
+        # direktem Ueberschreiben. Referenz auf den Timer muss modulweit
+        # gehalten werden, sonst wird er vor dem Feuern garbage-collected.
+        def _set_title():
+            global _notify_title_timers
+            _notify_title_timers = []
+            for entry in current_notifications:
+                try:
+                    if entry[0] == _id:
+                        entry[1].origTitle = "MagentaMusik"
+                        entry[1].setTitle("MagentaMusik")
+                except Exception:
+                    pass
+
+        t = eTimer()
+        t.callback.append(_set_title)
+        t.start(100, True)
+        _notify_title_timers.append(t)
     except Exception:
         pass
 
 
 def _notify_downloads_done():
+    if _plugin_is_open():
+        return
     try:
         from twisted.internet import reactor
         reactor.callFromThread(_fire_download_notification)
@@ -1125,6 +1165,8 @@ class _BrowseScreenBase(Screen):
     skin = _build_skin()
 
     def __init__(self, session, title):
+        global _open_screen_count
+        _open_screen_count += 1
         Screen.__init__(self, session)
         self._page             = 0
         self._sel               = 0
@@ -1218,7 +1260,9 @@ class _BrowseScreenBase(Screen):
             pass
 
     def __mark_closed(self):
+        global _open_screen_count
         self._closed = True
+        _open_screen_count = max(0, _open_screen_count - 1)
 
     # --- von Subklassen zu ueberschreiben ---
     def _fetch_items(self):
