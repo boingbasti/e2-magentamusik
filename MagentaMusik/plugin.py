@@ -160,6 +160,7 @@ def _set_setting(key, value):
 def _get_settings_list():
     return [
         ("show_covers",              "Vorschaubilder laden",          "toggle"),
+        ("wrap_lr",                  "Seite wechseln mit Links/Rechts", "toggle"),
         ("prefer_best_quality",      "Höchste Qualität bevorzugen",   "toggle"),
         ("serviceapp_autoconfigure", "ServiceApp auto-konfigurieren", "toggle"),
         ("debug_log",                "Debug-Log",                     "toggle"),
@@ -178,6 +179,7 @@ def _get_settings_list():
 
 _SETTINGS_DEFAULTS = {
     "show_covers":              True,
+    "wrap_lr":                  True,
     "prefer_best_quality":      True,
     "serviceapp_autoconfigure": True,
     "debug_log":                False,
@@ -1540,21 +1542,29 @@ class _BrowseScreenBase(Screen):
                         self._sel = new_sel
                         self._update_sel_marker()
                         self._update_legend()
-                else:
+                elif _get_setting("wrap_lr", True):
                     new_abs = (offset + self._sel + 1) % total
                     self._page = new_abs // TILES_PER_PAGE
                     self._sel  = new_abs % TILES_PER_PAGE
                     self._render()
+                else:
+                    self._sel = row * TILE_COLS
+                    self._update_sel_marker()
+                    self._update_legend()
             else:  # links
                 if col > 0:
                     self._sel -= 1
                     self._update_sel_marker()
                     self._update_legend()
-                else:
+                elif _get_setting("wrap_lr", True):
                     new_abs = (offset + self._sel - 1) % total
                     self._page = new_abs // TILES_PER_PAGE
                     self._sel  = new_abs % TILES_PER_PAGE
                     self._render()
+                else:
+                    self._sel = min(row * TILE_COLS + TILE_COLS - 1, page_count - 1)
+                    self._update_sel_marker()
+                    self._update_legend()
         else:
             if delta > 0:  # unten
                 new_row = (row + 1) % TILE_ROWS

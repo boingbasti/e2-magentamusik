@@ -514,6 +514,7 @@ DEFAULT_DOWNLOAD_DIR = "/media/hdd/movie/MagentaMusik"
 
 _SETTINGS_DEFAULTS = {
     "show_covers":              True,
+    "wrap_lr":                  True,
     "prefer_best_quality":      True,
     "serviceapp_autoconfigure": True,
     "debug_log":                False,
