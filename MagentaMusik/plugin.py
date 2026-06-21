@@ -157,6 +157,27 @@ def _set_setting(key, value):
     _catalog.save_settings(s)
 
 
+def _sync_debug_flag():
+    # _MM_DEBUG_FLAG liegt in /tmp (tmpfs) und wird bei jedem Box-Neustart
+    # geleert, das "debug_log"-Setting wird aber persistent in
+    # /etc/enigma2/magentamusik.json gespeichert - ohne diesen Abgleich wuerde
+    # nach einem Neustart bei aktiviertem Debug-Log im UI "An" stehen, obwohl
+    # _dbg() mangels Flag-Datei still nichts mehr loggt. Beim Plugin-Laden
+    # einmalig ausgefuehrt, damit die Flag-Datei wieder zum Setting passt.
+    try:
+        if _get_setting("debug_log", False):
+            if not os.path.exists(_MM_DEBUG_FLAG):
+                open(_MM_DEBUG_FLAG, "w").close()
+        else:
+            if os.path.exists(_MM_DEBUG_FLAG):
+                os.remove(_MM_DEBUG_FLAG)
+    except Exception:
+        pass
+
+
+_sync_debug_flag()
+
+
 def _get_settings_list():
     return [
         ("show_covers",              "Vorschaubilder laden",          "toggle"),
@@ -944,16 +965,7 @@ class MagentaMusikSettingsScreen(Screen):
         for key, label, kind in _get_settings_list():
             settings[key] = self._pending[key]
         _catalog.save_settings(settings)
-        if self._pending.get("debug_log", False):
-            try:
-                open(_MM_DEBUG_FLAG, "w").close()
-            except Exception:
-                pass
-        else:
-            try:
-                os.remove(_MM_DEBUG_FLAG)
-            except Exception:
-                pass
+        _sync_debug_flag()
         self.close()
 
     def _on_red(self):
