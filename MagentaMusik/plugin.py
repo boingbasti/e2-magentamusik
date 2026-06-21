@@ -1047,6 +1047,20 @@ def _queue_error(msg):
 
 
 def _queue_next():
+    """Stoesst die Verarbeitung der Warteschlange an - laeuft IMMER in einem
+    Hintergrundthread, egal von welchem Thread aus aufgerufen. Wichtig fuer
+    den allerersten Download: der wird per Tastendruck direkt auf dem
+    GUI-Thread ausgeloest, ohne diesen Dispatch wuerde resolve_full() (3
+    sequenzielle HTTP-Requests an magentamusik.de) die Oberflaeche blockieren
+    (sichtbar als Lade-Spinner). Nachfolgende Downloads laufen ohnehin schon
+    im Hintergrundthread des jeweils vorherigen Downloaders - der zusaetzliche
+    Thread-Spawn dort ist unschaedlich."""
+    t = threading.Thread(target=_queue_next_worker)
+    t.daemon = True
+    t.start()
+
+
+def _queue_next_worker():
     """Startet den naechsten Download aus der Warteschlange (loest dabei die
     Event-URL erst jetzt auf), oder meldet alle fertig."""
     global _active_downloader, _download_queue, _bg_download_result, _user_cancelled_all
@@ -1083,7 +1097,7 @@ def _queue_next():
         dl.start()
     except Exception as e:
         _dbg("_queue_next Fehler: %s" % e)
-        _queue_next()
+        _queue_next_worker()
 
 
 # Referenzzaehler statt einfachem Bool, da es bei uns (anders als OeMediathek
@@ -1272,12 +1286,38 @@ class _BrowseScreenBase(Screen):
         pass
 
     # --- generisches Laden ---
+    # _fetch_items() macht Netzwerk-I/O (Festivalliste/Live-Status bzw.
+    # Festival-Items, je nach Subklasse) - direkt auf dem GUI-Thread aufgerufen
+    # blockiert das die komplette Oberflaeche fuer die Dauer des Requests
+    # (sichtbar als Lade-Spinner der Box). Deshalb in einem Hintergrundthread
+    # laden, Ergebnis per reactor.callFromThread zurueck auf den GUI-Thread.
     def _load(self):
-        self._items = self._fetch_items()
-        self._error = _catalog.last_fetch_error()
-        self._page  = 0
-        self._sel   = 0
-        self._render()
+        self["status"].setText(_b("Lade…"))
+        t = threading.Thread(target=self.__load_bg)
+        t.daemon = True
+        t.start()
+
+    def __load_bg(self):
+        try:
+            items = self._fetch_items()
+            error = _catalog.last_fetch_error()
+        except Exception as e:
+            items, error = [], str(e)
+
+        def _apply():
+            if self._closed:
+                return
+            self._items = items
+            self._error = error
+            self._page  = 0
+            self._sel   = 0
+            self._render()
+
+        try:
+            from twisted.internet import reactor
+            reactor.callFromThread(_apply)
+        except Exception:
+            _apply()
 
     def _key_cancel(self):
         self.close()
