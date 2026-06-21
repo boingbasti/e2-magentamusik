@@ -363,7 +363,7 @@ def _build_skin():
             '<widget name="hint_ok"     position="588,{ly}"  size="258,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<eLabel backgroundColor="#1ACCAA00" position="870,{py}" size="{pw},{ph}" zPosition="2" transparent="0"/>'
             '<widget name="hint_yellow" position="888,{ly}"  size="200,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<eLabel backgroundColor="#1A0066CC" position="1110,{py}" size="{pw},{ph}" zPosition="2" transparent="0"/>'
+            '<widget name="blue_pip" position="1110,{py}" size="{pw},{ph}" zPosition="2" backgroundColor="#1A0066CC" transparent="0"/>'
             '<widget name="hint_blue"   position="1128,{ly}" size="280,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<widget name="hint_ch"     position="1430,{ly}" size="320,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
             '<widget name="page_label"  position="1770,{ly}" size="100,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;28" halign="right" valign="center" foregroundColor="#AAAAAA"/>'
@@ -383,7 +383,7 @@ def _build_skin():
             '<widget name="hint_ok"     position="370,{ly}"  size="172,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<eLabel backgroundColor="#1ACCAA00" position="560,{py}" size="{pw},{ph}" zPosition="2" transparent="0"/>'
             '<widget name="hint_yellow" position="568,{ly}"  size="130,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<eLabel backgroundColor="#1A0066CC" position="715,{py}" size="{pw},{ph}" zPosition="2" transparent="0"/>'
+            '<widget name="blue_pip" position="715,{py}" size="{pw},{ph}" zPosition="2" backgroundColor="#1A0066CC" transparent="0"/>'
             '<widget name="hint_blue"   position="723,{ly}"  size="180,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<widget name="hint_ch"     position="920,{ly}"  size="220,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
             '<widget name="page_label"  position="1158,{ly}" size="62,{lh}"  zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="right" valign="center" foregroundColor="#AAAAAA"/>'
@@ -987,6 +987,12 @@ _bg_download_result = None
 _user_cancelled_all  = False
 
 
+def _downloads_active():
+    active = _active_downloader is not None and _active_downloader._thread is not None \
+        and _active_downloader._thread.is_alive()
+    return bool(active or _download_queue)
+
+
 def _format_duration(meta):
     # downloader.write_meta()/write_info_txt() interpretieren ein "duration"-
     # Argument mit Doppelpunkt als Uhrzeit-Dauer (MM:SS bzw. H:MM:SS, Sekunden
@@ -1145,6 +1151,8 @@ class _BrowseScreenBase(Screen):
         self["hint_green"]  = Label(_b("Einstellungen"))
         self["hint_red"]    = Label(_b(""))
         self["hint_blue"]   = Label(_b("Downloads"))
+        self["blue_pip"]    = Label(_b(""))
+        self["blue_pip"].hide()
         self["page_label"]  = Label(_b(""))
 
         if _Pixmap:
@@ -1256,6 +1264,8 @@ class _BrowseScreenBase(Screen):
         pass
 
     def _key_blue(self):
+        if not _downloads_active():
+            return
         self.session.open(
             MagentaMusikDownloadManagerScreen,
             lambda: _active_downloader, lambda: _download_queue,
@@ -1279,7 +1289,8 @@ class _BrowseScreenBase(Screen):
         active = _active_downloader is not None and _active_downloader._thread is not None \
             and _active_downloader._thread.is_alive()
         n = len(_download_queue) + (1 if active else 0)
-        self["hint_blue"].setText(_b("Downloads (%d)" % n if n else "Downloads"))
+        self["hint_blue"].setText(_b("Downloads (%d)" % n if n else ""))
+        self["blue_pip"].show() if n else self["blue_pip"].hide()
         if _bg_download_result is not None:
             result = _bg_download_result
             _bg_download_result = None
