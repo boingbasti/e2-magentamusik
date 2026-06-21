@@ -752,6 +752,95 @@ class MagentaMusikDirBrowser(Screen):
 
 
 # ------------------------------------------------------------------
+# Ja/Nein-Bestaetigung (z.B. "Einstellungen ohne Speichern verlassen?") -
+# kleine Cursor-Liste mit zwei Zeilen statt Farbtasten, analog zum
+# _sa_confirm()/_SAChoiceScreen-Muster aus e2-StreamAnything: Hoch/Runter
+# bewegt die Auswahl, OK bestaetigt, EXIT bricht sicher mit "Nein" ab.
+# ------------------------------------------------------------------
+class MagentaMusikConfirmScreen(Screen):
+
+    @staticmethod
+    def _make_skin():
+        if IS_FHD:
+            sw, mh, row_h, hint_h = 700, 110, 60, 50
+            mf, rf, hf = 30, 28, 24
+        else:
+            sw, mh, row_h, hint_h = 460, 73, 40, 33
+            mf, rf, hf = 20, 19, 16
+        margin = 20 if IS_FHD else 14
+        row_y0 = margin + mh + (10 if IS_FHD else 7)
+        hint_y = row_y0 + 2 * row_h + (10 if IS_FHD else 7)
+        sh     = hint_y + hint_h
+        sx = (_SCREEN_W - sw) // 2
+        sy = (_SCREEN_H - sh) // 2
+        rows_xml = ""
+        for i in range(2):
+            y = row_y0 + i * row_h
+            rows_xml += (
+                '<widget name="c_sel_{i}" position="0,{y}" size="{sw},{rh}" '
+                'backgroundColor="#11cc0066" zPosition="1" transparent="0"/>'
+                '<widget name="c_label_{i}" position="20,{y}" size="{lw},{rh}" '
+                'zPosition="2" font="Regular;{rf}" halign="left" valign="center" '
+                'foregroundColor="#00E0E0E0" backgroundColor="#33000000" transparent="1"/>'
+            ).format(i=i, y=y, sw=sw, rh=row_h, lw=sw - 40, rf=rf)
+        return (
+            '<screen backgroundColor="transparent" flags="wfNoBorder" '
+            'position="{sx},{sy}" size="{sw},{sh}">'
+            '<eLabel position="0,0" size="{sw},{sh}" backgroundColor="#1A000000" zPosition="-5" transparent="0"/>'
+            '<eLabel position="0,0" size="{sw},4" backgroundColor="#cc0066" zPosition="1" transparent="0"/>'
+            '<widget name="message" position="{m},{m}" size="{mw},{mh}" font="Regular;{mf}" '
+            'halign="center" valign="center" foregroundColor="#00FFFFFF" backgroundColor="#1A000000" transparent="1"/>'
+            '{rows}'
+            '<widget name="hint_label" position="0,{hy}" size="{sw},{hh}" zPosition="4" '
+            'transparent="1" backgroundColor="#1A000000" font="Regular;{hf}" halign="center" '
+            'valign="center" foregroundColor="#AAAAAA"/>'
+            '</screen>'
+        ).format(
+            sx=sx, sy=sy, sw=sw, sh=sh, m=margin, mw=sw - 2 * margin, mh=mh, mf=mf,
+            rows=rows_xml, hy=hint_y, hh=hint_h, hf=hf,
+        )
+
+    def __init__(self, session, message):
+        self.skin = self._make_skin()
+        Screen.__init__(self, session)
+        self._sel = 1  # Cursor startet auf "Nein" - sicherer Default
+        self["message"]    = Label(_b(message))
+        self["c_label_0"]  = Label(_b("Ja"))
+        self["c_label_1"]  = Label(_b("Nein"))
+        self["c_sel_0"]    = Label(_b(""))
+        self["c_sel_1"]    = Label(_b(""))
+        self["hint_label"] = Label(_b("OK = Auswählen   |   EXIT = Abbrechen"))
+
+        self["actions"] = ActionMap(
+            ["OkCancelActions", "DirectionActions"],
+            {
+                "ok":           self._on_ok,
+                "cancel":       self._no,
+                "up":           self._move,
+                "down":         self._move,
+                "upRepeated":   self._move,
+                "downRepeated": self._move,
+            },
+            -1,
+        )
+        self._refresh()
+
+    def _move(self):
+        self._sel = 1 - self._sel
+        self._refresh()
+
+    def _refresh(self):
+        self["c_sel_0"].show() if self._sel == 0 else self["c_sel_0"].hide()
+        self["c_sel_1"].show() if self._sel == 1 else self["c_sel_1"].hide()
+
+    def _on_ok(self):
+        self.close(self._sel == 0)
+
+    def _no(self):
+        self.close(False)
+
+
+# ------------------------------------------------------------------
 # Settings-Screen
 # ------------------------------------------------------------------
 class MagentaMusikSettingsScreen(Screen):
@@ -869,7 +958,16 @@ class MagentaMusikSettingsScreen(Screen):
         self.close()
 
     def _on_red(self):
-        self.close()
+        if self._pending != self._original:
+            self.session.openWithCallback(
+                self._on_discard_confirmed, MagentaMusikConfirmScreen,
+                "Einstellungen ohne Speichern verlassen?")
+        else:
+            self.close()
+
+    def _on_discard_confirmed(self, confirmed):
+        if confirmed:
+            self.close()
 
 
 # ------------------------------------------------------------------
