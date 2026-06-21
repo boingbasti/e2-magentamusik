@@ -409,12 +409,13 @@ def _build_skin():
     tpx_old = _TITLE_X + tpad
     tpx     = logo_lx + logo_lw + tgap
     if IS_FHD:
-        ttw, stx, stw, vtx, vtw = 900, 1100, 400, 1490, 370
+        ttw, stx, stw, vtx, vtw = 900, 950, 520, 1490, 370
         tfs, sfs, ifs = 36, 24, 26
     else:
-        ttw, stx, stw, vtx, vtw = 600, 750, 250, 960, 280
+        ttw, stx, stw, vtx, vtw = 600, 650, 300, 960, 280
         tfs, sfs, ifs = 24, 16, 18
     ttw -= (tpx - tpx_old)
+    ttw  = min(ttw, stx - tpx - 10)  # Titel-Box darf die Status-Box nie ueberlappen
     return (
         '<screen backgroundColor="transparent" flags="wfNoBorder" '
         'position="0,0" size="{sw},{sh}" title="MagentaMusik">'
@@ -428,7 +429,7 @@ def _build_skin():
         'zPosition="4" backgroundColor="#0A000000" font="Regular;{tfs}" halign="left" '
         'valign="center" foregroundColor="#00cc0066"/>'
         '<widget name="status" position="{stx},{ty}" size="{stw},{th}" '
-        'zPosition="4" backgroundColor="#0A000000" font="Regular;{sfs}" halign="right" '
+        'zPosition="4" backgroundColor="#0A000000" font="Regular;{sfs}" halign="right" noWrap="1" '
         'valign="center" foregroundColor="#00CCAA00"/>'
         '<eLabel text="v{ver}" position="{vtx},{ty}" size="{vtw},{th}" '
         'zPosition="4" backgroundColor="#0A000000" font="Regular;{ifs}" halign="right" '
