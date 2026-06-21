@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<meta>
+    <name>MagentaMusik</name>
+    <description>Festivals &amp; Konzerte von magentamusik.de durchsuchen und abspielen.</description>
+    <version>1.0.0</version>
+    <author>saufsoldat</author>
+    <homepage>https://github.com/boingbasti/e2-magentatv</homepage>
+    <license>GPL2</license>
+</meta>

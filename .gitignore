@@ -1,0 +1,13 @@
+# Python
+*.pyc
+*.pyo
+__pycache__/
+
+# Build-Artefakt (per build_ipk.py jederzeit neu erzeugbar)
+*.ipk
+
+# Laufzeit-Cache (heruntergeladene Cover, kein Quellmaterial)
+MagentaMusik/covers/
+
+# Lokale Claude-Code-Einstellungen
+.claude/
