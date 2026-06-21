@@ -1891,20 +1891,43 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
         self._play(item)
 
     def _play(self, item):
-        from magentamusik import is_magentamusik as _is_mm, resolve as _resolve
         raw_url = item["url"]
+        self["status"].setText(_b("Lade…"))
+        t = threading.Thread(target=self.__play_bg, args=(item, raw_url))
+        t.daemon = True
+        t.start()
+
+    def __play_bg(self, item, raw_url):
+        from magentamusik import is_magentamusik as _is_mm, resolve as _resolve
         # Zusaetzliche Buehnen (siehe get_live_stages) liefern bereits eine
         # fertige .m3u8-Stream-URL direkt vom CDN, keine magentamusik.de-Seite
         # zum Aufloesen - resolve() nur fuer echte magentamusik.de-URLs nutzen.
-        url = _resolve(raw_url) if _is_mm(raw_url) else raw_url
-        if not url:
-            return
-        play_stream(
-            self.session, url, title=item.get("name", "Live"), is_live=True,
-            autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-            prefer_best_quality=_get_setting("prefer_best_quality", True),
-            hls_audio_fix=True,
-        )
+        # _resolve() macht bis zu 3 sequenzielle HTTP-Requests - im
+        # Hintergrundthread, sonst blockiert das den GUI-Thread (Lade-Spinner).
+        try:
+            url = _resolve(raw_url) if _is_mm(raw_url) else raw_url
+        except Exception:
+            url = None
+
+        def _apply():
+            if self._closed:
+                return
+            if not url:
+                self._render()
+                return
+            play_stream(
+                self.session, url, title=item.get("name", "Live"), is_live=True,
+                autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
+                prefer_best_quality=_get_setting("prefer_best_quality", True),
+                hls_audio_fix=True,
+            )
+            self._render()
+
+        try:
+            from twisted.internet import reactor
+            reactor.callFromThread(_apply)
+        except Exception:
+            _apply()
 
 
 # ------------------------------------------------------------------
@@ -1929,17 +1952,41 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
         return out
 
     def _on_select_item(self, item, idx):
+        self["status"].setText(_b("Lade…"))
+        t = threading.Thread(target=self.__play_bg, args=(item, idx))
+        t.daemon = True
+        t.start()
+
+    def __play_bg(self, item, idx):
         from magentamusik import resolve as _resolve
-        url = _resolve(item["url"])
-        if not url:
-            return
-        play_stream(
-            self.session, url, title=item.get("name", "Stream"), is_live=True,
-            autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-            prefer_best_quality=_get_setting("prefer_best_quality", True),
-            streams=self._items, stream_index=idx,
-            hls_audio_fix=True,
-        )
+        # resolve() macht bis zu 3 sequenzielle HTTP-Requests gegen
+        # magentamusik.de - im Hintergrundthread, sonst blockiert das den
+        # GUI-Thread beim Start jedes Konzerts (Lade-Spinner).
+        try:
+            url = _resolve(item["url"])
+        except Exception:
+            url = None
+
+        def _apply():
+            if self._closed:
+                return
+            if not url:
+                self._render()
+                return
+            play_stream(
+                self.session, url, title=item.get("name", "Stream"), is_live=True,
+                autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
+                prefer_best_quality=_get_setting("prefer_best_quality", True),
+                streams=self._items, stream_index=idx,
+                hls_audio_fix=True,
+            )
+            self._render()
+
+        try:
+            from twisted.internet import reactor
+            reactor.callFromThread(_apply)
+        except Exception:
+            _apply()
 
     def _start_download(self, item):
         state = _enqueue_download(
