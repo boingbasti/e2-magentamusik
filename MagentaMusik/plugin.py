@@ -161,7 +161,6 @@ def _get_settings_list():
     return [
         ("show_covers",              "Vorschaubilder laden",          "toggle"),
         ("wrap_lr",                  "Seite wechseln mit Links/Rechts", "toggle"),
-        ("prefer_best_quality",      "Höchste Qualität bevorzugen",   "toggle"),
         ("serviceapp_autoconfigure", "ServiceApp auto-konfigurieren", "toggle"),
         ("debug_log",                "Debug-Log",                     "toggle"),
         ("download_dir",             "Download-Ordner",               "path"),
@@ -180,7 +179,6 @@ def _get_settings_list():
 _SETTINGS_DEFAULTS = {
     "show_covers":              True,
     "wrap_lr":                  True,
-    "prefer_best_quality":      True,
     "serviceapp_autoconfigure": True,
     "debug_log":                False,
     "list_mode":                False,
@@ -1918,7 +1916,6 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
             play_stream(
                 self.session, url, title=item.get("name", "Live"), is_live=True,
                 autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-                prefer_best_quality=_get_setting("prefer_best_quality", True),
                 hls_audio_fix=True,
             )
             self._render()
@@ -1976,7 +1973,6 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
             play_stream(
                 self.session, url, title=item.get("name", "Stream"), is_live=True,
                 autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-                prefer_best_quality=_get_setting("prefer_best_quality", True),
                 streams=self._items, stream_index=idx,
                 hls_audio_fix=True,
             )

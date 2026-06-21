@@ -30,13 +30,12 @@ class MMStreamPlayer(MoviePlayer):
     ENABLE_RESUME_SUPPORT = False
 
     def __init__(self, session, service, streams=None, stream_index=0,
-                 autoconfigure_serviceapp=True, prefer_best_quality=True):
+                 autoconfigure_serviceapp=True):
         MoviePlayer.__init__(self, session, service)
         self.skinName = ["MoviePlayer", "InfoBar"]
         self._streams             = streams or []
         self._stream_index        = stream_index
         self._autoconfigure       = autoconfigure_serviceapp
-        self._prefer_best_quality = prefer_best_quality
         if len(self._streams) > 1:
             from Components.ActionMap import ActionMap
             self["_mm_nav"] = ActionMap(
@@ -67,8 +66,7 @@ class MMStreamPlayer(MoviePlayer):
         except Exception:
             pass
         ref = _build_ref(url, name, "", "",
-                         self._autoconfigure, self._prefer_best_quality,
-                         hls_audio_fix=True)
+                         self._autoconfigure, hls_audio_fix=True)
         self._stream_index    = new_idx
         self._showing_offline = False
         self.session.nav.playService(ref)
@@ -93,51 +91,6 @@ def _has_serviceapp():
 def _has_new_exteplayer3():
     # exteplayer3 >= v181 (feedplus/manuell) bringt eigene Libs in /usr/lib/exteplayer3_deps/
     return os.path.isdir("/usr/lib/exteplayer3_deps")
-
-
-def _resolve_hls_best_variant(url, user_agent=""):
-    _dbg("_resolve_hls_best_variant url=%s" % url)
-    if not url.lower().split("?")[0].endswith(".m3u8"):
-        _dbg("not m3u8, returning as-is")
-        return url
-    try:
-        try:
-            from urllib2 import urlopen, Request
-        except ImportError:
-            from urllib.request import urlopen, Request
-        import re
-        headers = {"User-Agent": user_agent or "Mozilla/5.0"}
-        req = Request(url, headers=headers)
-        resp = urlopen(req, timeout=8)
-        effective_url = resp.geturl()
-        content = resp.read().decode("utf-8", "replace")
-        _dbg("m3u8 fetched effective_url=%s len=%d has_stream_inf=%s" % (
-            effective_url, len(content), "#EXT-X-STREAM-INF" in content))
-        if "#EXT-X-STREAM-INF" not in content:
-            return url
-        best_bw, best_url = -1, None
-        lines = content.splitlines()
-        for i, line in enumerate(lines):
-            if line.startswith("#EXT-X-STREAM-INF:"):
-                m = re.search(r"BANDWIDTH=(\d+)", line)
-                if m and i + 1 < len(lines):
-                    candidate = lines[i + 1].strip()
-                    if candidate and not candidate.startswith("#"):
-                        bw = int(m.group(1))
-                        if bw > best_bw:
-                            best_bw, best_url = bw, candidate
-        if best_url:
-            if not best_url.startswith("http"):
-                try:
-                    from urlparse import urljoin
-                except ImportError:
-                    from urllib.parse import urljoin
-                best_url = urljoin(effective_url, best_url)
-            _dbg("best variant selected bw=%d url=%s" % (best_bw, best_url))
-            return best_url
-    except Exception as e:
-        _dbg("_resolve_hls_best_variant exception: %s" % e)
-    return url
 
 
 def _build_local_playlist(master_url, user_agent=""):
@@ -279,7 +232,7 @@ def _configure_serviceapp_for_live():
 
 
 def _build_ref(url, title, player, user_agent,
-               autoconfigure_serviceapp=True, prefer_best_quality=True,
+               autoconfigure_serviceapp=True,
                is_live=True, hls_audio_fix=False):
     url_str = url.decode("utf-8", "replace") if isinstance(url, bytes) else url
     if hls_audio_fix:
@@ -287,8 +240,6 @@ def _build_ref(url, title, player, user_agent,
         if local_url:
             url_str    = local_url
             user_agent = ""
-    elif prefer_best_quality:
-        url_str = _resolve_hls_best_variant(url_str, user_agent)
     if user_agent:
         sep = "&" if "|" in url_str else "|"
         url_str = url_str + sep + "User-Agent=" + user_agent
@@ -316,13 +267,12 @@ def _build_ref(url, title, player, user_agent,
 
 
 def play_stream(session, stream_url, title="Stream", is_live=False, player="", user_agent="",
-                autoconfigure_serviceapp=True, prefer_best_quality=True,
+                autoconfigure_serviceapp=True,
                 streams=None, stream_index=0, hls_audio_fix=True):
     ref = _build_ref(stream_url, title, player, user_agent,
-                     autoconfigure_serviceapp, prefer_best_quality, is_live,
+                     autoconfigure_serviceapp, is_live,
                      hls_audio_fix=hls_audio_fix)
     session.open(MMStreamPlayer, ref,
                  streams=streams or [],
                  stream_index=stream_index,
-                 autoconfigure_serviceapp=autoconfigure_serviceapp,
-                 prefer_best_quality=prefer_best_quality)
+                 autoconfigure_serviceapp=autoconfigure_serviceapp)
