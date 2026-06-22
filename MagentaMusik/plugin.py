@@ -1793,10 +1793,15 @@ class _BrowseScreenBase(Screen):
         old_sel    = self._list_sel
         old_scroll = self._list_scroll
         self._list_sel = (self._list_sel + step) % total
-        if self._list_sel < self._list_scroll:
-            self._list_scroll = self._list_sel
-        elif self._list_sel >= self._list_scroll + LIST_ROWS:
-            self._list_scroll = self._list_sel - LIST_ROWS + 1
+        if self._list_sel < old_scroll or self._list_sel >= old_scroll + LIST_ROWS:
+            # Beim Verlassen der sichtbaren Seite springt der neue Eintrag an den
+            # Seitenrand, der in Bewegungsrichtung liegt (Systemlisten-Verhalten:
+            # runter -> neuer Eintrag oben, hoch -> neuer Eintrag unten), statt
+            # nur zeilenweise mit dem Cursor am Rand kleben zu bleiben.
+            if step > 0:
+                self._list_scroll = self._list_sel
+            else:
+                self._list_scroll = self._list_sel - LIST_ROWS + 1
         self._list_scroll = max(0, min(self._list_scroll, max(0, total - LIST_ROWS)))
         if self._list_scroll != old_scroll:
             self._render_list()
