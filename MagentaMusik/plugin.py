@@ -58,7 +58,7 @@ def _cached_pixmap(path):
 
 
 import catalog as _catalog
-from player import play_stream
+from player import play_resolved_stream, resolve_local_playlist
 from downloader import Downloader, convert_mp4_to_ts
 from download_manager import MagentaMusikDownloadManagerScreen
 
@@ -1925,16 +1925,24 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
         except Exception:
             url = None
 
+        # resolve_local_playlist() macht ebenfalls eine blockierende HTTP-
+        # Anfrage (HLS-Audio-Fix) - muss genau wie resolve() im
+        # Hintergrundthread laufen, sonst friert beim naechsten Netzwerk-
+        # Haenger der komplette Player (inkl. WebIF) ein.
+        url_str = user_agent = None
+        if url:
+            url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
+
         def _apply():
             if self._closed:
                 return
-            if not url:
+            if not url_str:
                 self._render()
                 return
-            play_stream(
-                self.session, url, title=item.get("name", "Live"), is_live=True,
+            play_resolved_stream(
+                self.session, url_str, title=item.get("name", "Live"), is_live=True,
+                user_agent=user_agent,
                 autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-                hls_audio_fix=True,
             )
             self._render()
 
@@ -1982,17 +1990,25 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
         except Exception:
             url = None
 
+        # resolve_local_playlist() macht ebenfalls eine blockierende HTTP-
+        # Anfrage (HLS-Audio-Fix) - muss genau wie resolve() im
+        # Hintergrundthread laufen, sonst friert beim naechsten Netzwerk-
+        # Haenger der komplette Player (inkl. WebIF) ein.
+        url_str = user_agent = None
+        if url:
+            url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
+
         def _apply():
             if self._closed:
                 return
-            if not url:
+            if not url_str:
                 self._render()
                 return
-            play_stream(
-                self.session, url, title=item.get("name", "Stream"), is_live=True,
+            play_resolved_stream(
+                self.session, url_str, title=item.get("name", "Stream"), is_live=True,
+                user_agent=user_agent,
                 autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
                 streams=self._items, stream_index=idx,
-                hls_audio_fix=True,
             )
             self._render()
 

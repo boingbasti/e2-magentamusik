@@ -36,6 +36,9 @@ class MMStreamPlayer(MoviePlayer):
         self._streams             = streams or []
         self._stream_index        = stream_index
         self._autoconfigure       = autoconfigure_serviceapp
+        self._closed               = False
+        self._switching            = False
+        self.onClose.append(self.__mark_closed)
         if len(self._streams) > 1:
             from Components.ActionMap import ActionMap
             self["_mm_nav"] = ActionMap(
@@ -47,8 +50,13 @@ class MMStreamPlayer(MoviePlayer):
                 -1,
             )
 
+    def __mark_closed(self):
+        self._closed = True
+
     def _switch_stream(self, direction):
         _dbg("_switch_stream called direction=%d" % direction)
+        if self._switching:
+            return
         new_idx = self._stream_index + direction
         if new_idx < 0 or new_idx >= len(self._streams):
             return
@@ -57,6 +65,18 @@ class MMStreamPlayer(MoviePlayer):
         name = item.get("headline", item.get("name", "Stream"))
         if not url:
             return
+        # resolve() und der HLS-Audio-Fix (_build_local_playlist) machen
+        # blockierende HTTP-Anfragen (DNS-Aufloesung wird vom timeout nicht
+        # zuverlaessig abgedeckt) - deshalb im Hintergrundthread, sonst
+        # friert bei einem Netzwerk-Haenger der komplette Player (und damit
+        # auch das WebIF, da beide den GIL teilen) ein.
+        import threading
+        self._switching = True
+        t = threading.Thread(target=self.__switch_bg, args=(new_idx, url, name))
+        t.daemon = True
+        t.start()
+
+    def __switch_bg(self, new_idx, url, name):
         try:
             import magentamusik as _mm
             if _mm.is_magentamusik(url):
@@ -65,11 +85,22 @@ class MMStreamPlayer(MoviePlayer):
                     url = resolved
         except Exception:
             pass
-        ref = _build_ref(url, name, "", "",
-                         self._autoconfigure, hls_audio_fix=True)
-        self._stream_index    = new_idx
-        self._showing_offline = False
-        self.session.nav.playService(ref)
+        url_str, user_agent = resolve_local_playlist(url, "", True)
+
+        def _apply():
+            self._switching = False
+            if self._closed:
+                return
+            ref = _build_ref(url_str, name, "", user_agent, self._autoconfigure)
+            self._stream_index    = new_idx
+            self._showing_offline = False
+            self.session.nav.playService(ref)
+
+        try:
+            from twisted.internet import reactor
+            reactor.callFromThread(_apply)
+        except Exception:
+            _apply()
 
     def leavePlayer(self):
         self.close()
@@ -231,15 +262,24 @@ def _configure_serviceapp_for_live():
         pass
 
 
-def _build_ref(url, title, player, user_agent,
-               autoconfigure_serviceapp=True,
-               is_live=True, hls_audio_fix=False):
-    url_str = url.decode("utf-8", "replace") if isinstance(url, bytes) else url
+def resolve_local_playlist(stream_url, user_agent="", hls_audio_fix=True):
+    # Netzwerkteil des HLS-Audio-Fixes (_build_local_playlist macht eine
+    # blockierende HTTP-Anfrage, deren DNS-Aufloesung vom timeout=8 nicht
+    # zuverlaessig abgedeckt wird). MUSS im Hintergrundthread aufgerufen
+    # werden - nie im GUI-/Reactor-Thread, sonst friert bei einem
+    # Netzwerk-Haenger der komplette Player (inkl. WebIF, gleicher GIL) ein.
+    url_str = stream_url.decode("utf-8", "replace") if isinstance(stream_url, bytes) else stream_url
     if hls_audio_fix:
         local_url = _build_local_playlist(url_str, user_agent)
         if local_url:
-            url_str    = local_url
-            user_agent = ""
+            return local_url, ""
+    return url_str, user_agent
+
+
+def _build_ref(url, title, player, user_agent, autoconfigure_serviceapp=True, is_live=True):
+    # Netzwerkfrei - der Aufrufer muss hls_audio_fix bereits per
+    # resolve_local_playlist() im Hintergrundthread erledigt haben.
+    url_str = url.decode("utf-8", "replace") if isinstance(url, bytes) else url
     if user_agent:
         sep = "&" if "|" in url_str else "|"
         url_str = url_str + sep + "User-Agent=" + user_agent
@@ -266,12 +306,13 @@ def _build_ref(url, title, player, user_agent,
     return ref
 
 
-def play_stream(session, stream_url, title="Stream", is_live=False, player="", user_agent="",
-                autoconfigure_serviceapp=True,
-                streams=None, stream_index=0, hls_audio_fix=True):
+def play_resolved_stream(session, stream_url, title="Stream", is_live=True, player="", user_agent="",
+                         autoconfigure_serviceapp=True,
+                         streams=None, stream_index=0):
+    # GUI-Thread-sicher: erwartet, dass resolve_local_playlist() (Netzwerk-
+    # zugriff) bereits vorher im Hintergrundthread gelaufen ist.
     ref = _build_ref(stream_url, title, player, user_agent,
-                     autoconfigure_serviceapp, is_live,
-                     hls_audio_fix=hls_audio_fix)
+                     autoconfigure_serviceapp, is_live)
     session.open(MMStreamPlayer, ref,
                  streams=streams or [],
                  stream_index=stream_index,
