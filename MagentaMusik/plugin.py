@@ -1990,10 +1990,12 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
         except Exception:
             url = None
 
-        # resolve_local_playlist() macht ebenfalls eine blockierende HTTP-
-        # Anfrage (HLS-Audio-Fix) - muss genau wie resolve() im
-        # Hintergrundthread laufen, sonst friert beim naechsten Netzwerk-
-        # Haenger der komplette Player (inkl. WebIF) ein.
+        # VOD-Playlists von magentamusik.de muxen Audio zwar direkt in jede
+        # Bitrate-Variante (kein separater #EXT-X-MEDIA AUDIO-Track noetig),
+        # aber resolve_local_playlist() waehlt zusaetzlich die beste Variante
+        # vorab aus - ohne das muss exteplayer3 selbst per ABR aushandeln,
+        # was den Start um mehrere Sekunden verzoegert. Laeuft bereits im
+        # Hintergrundthread (s.o.), GUI-Freeze-Risiko besteht nicht mehr.
         url_str = user_agent = None
         if url:
             url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)

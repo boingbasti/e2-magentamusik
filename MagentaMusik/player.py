@@ -85,6 +85,10 @@ class MMStreamPlayer(MoviePlayer):
                     url = resolved
         except Exception:
             pass
+        # resolve_local_playlist() waehlt die beste Bitrate-Variante vorab
+        # aus - ohne das muss exteplayer3 selbst per ABR aushandeln, was den
+        # Start um mehrere Sekunden verzoegert. Laeuft im Hintergrundthread,
+        # GUI-Freeze-Risiko besteht nicht mehr.
         url_str, user_agent = resolve_local_playlist(url, "", True)
 
         def _apply():
