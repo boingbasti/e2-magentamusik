@@ -1480,7 +1480,7 @@ class _BrowseScreenBase(Screen):
                 self._list_scroll = self._list_sel
             elif self._list_sel >= self._list_scroll + LIST_ROWS:
                 self._list_scroll = self._list_sel - LIST_ROWS + 1
-            self._list_scroll = max(0, min(self._list_scroll, max(0, total - LIST_ROWS)))
+            self._list_scroll = max(0, self._list_scroll)
 
         for i in range(LIST_ROWS):
             abs_idx = self._list_scroll + i
@@ -1802,7 +1802,10 @@ class _BrowseScreenBase(Screen):
                 self._list_scroll = self._list_sel
             else:
                 self._list_scroll = self._list_sel - LIST_ROWS + 1
-        self._list_scroll = max(0, min(self._list_scroll, max(0, total - LIST_ROWS)))
+        # Kein oberes Clamping auf total-LIST_ROWS: die letzte Seite darf eine
+        # echte, nicht zurueckgezogene Teil-Seite sein (leere Zeilen unterhalb
+        # des letzten Eintrags statt Ueberlappung mit der vorherigen Seite).
+        self._list_scroll = max(0, self._list_scroll)
         if self._list_scroll != old_scroll:
             self._render_list()
         else:
