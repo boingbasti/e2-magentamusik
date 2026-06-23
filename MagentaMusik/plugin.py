@@ -12,6 +12,7 @@ from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox as _MessageBox
 from Screens.VirtualKeyBoard import VirtualKeyBoard
+from Screens.ChoiceBox import ChoiceBox
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 from enigma import eTimer, ePoint, eSize, getDesktop
@@ -58,8 +59,8 @@ def _cached_pixmap(path):
 
 
 import catalog as _catalog
-from player import play_resolved_stream, resolve_local_playlist
-from downloader import Downloader, convert_mp4_to_ts
+from player import play_resolved_stream, resolve_local_playlist, HLSRecorder, format_duration
+from downloader import Downloader, convert_mp4_to_ts, format_size
 from download_manager import MagentaMusikDownloadManagerScreen
 
 # ------------------------------------------------------------------
@@ -383,9 +384,9 @@ def _build_skin():
             '<widget name="hint_yellow" position="606,{ly}"  size="200,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<widget name="blue_pip" position="830,{py}" size="{pw},{ph}" zPosition="2" backgroundColor="#1A0066CC" transparent="0"/>'
             '<widget name="hint_blue"   position="848,{ly}" size="280,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<widget name="hint_ok"     position="1150,{ly}" size="258,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<widget name="hint_ch"     position="1430,{ly}" size="320,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
-            '<widget name="page_label"  position="1770,{ly}" size="100,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;28" halign="right" valign="center" foregroundColor="#AAAAAA"/>'
+            '<widget name="hint_menu"   position="1150,{ly}" size="230,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
+            '<widget name="hint_info"   position="1395,{ly}" size="270,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
+            '<widget name="page_label"  position="1680,{ly}" size="210,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;28" halign="right" valign="center" foregroundColor="#AAAAAA" noWrap="1"/>'
         ).format(ly=ly, lh=lh, py=pip_y, ph=pip_h, pw=pip_w, fs=fs)
     else:
         ly, lh = _LEGEND_Y, _LEGEND_H
@@ -403,9 +404,9 @@ def _build_skin():
             '<widget name="hint_yellow" position="379,{ly}"  size="130,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
             '<widget name="blue_pip" position="527,{py}" size="{pw},{ph}" zPosition="2" backgroundColor="#1A0066CC" transparent="0"/>'
             '<widget name="hint_blue"   position="536,{ly}"  size="180,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<widget name="hint_ok"     position="733,{ly}"  size="172,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
-            '<widget name="hint_ch"     position="922,{ly}"  size="220,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
-            '<widget name="page_label"  position="1160,{ly}" size="62,{lh}"  zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="right" valign="center" foregroundColor="#AAAAAA"/>'
+            '<widget name="hint_menu"   position="733,{ly}"  size="150,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC"/>'
+            '<widget name="hint_info"   position="893,{ly}"  size="180,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="left"  valign="center" foregroundColor="#CCCCCC" noWrap="1"/>'
+            '<widget name="page_label"  position="1083,{ly}" size="150,{lh}" zPosition="4" transparent="1" backgroundColor="#1A000000" font="Regular;{fs}" halign="right" valign="center" foregroundColor="#AAAAAA" noWrap="1"/>'
         ).format(ly=ly, lh=lh, py=pip_y, ph=pip_h, pw=pip_w, fs=fs)
 
     # Logo links in der Titelzeile (Seitenverhaeltnis 400x160 = 2.5:1 des
@@ -1182,6 +1183,395 @@ def _enqueue_download(title, event_url, topic, image_url):
 
 
 # ------------------------------------------------------------------
+# Live-Aufnahme: parallele Hintergrund-Aufnahmen (kein Warteschlangen-
+# Modell wie bei VOD-Downloads oben - eine wartende Live-Aufnahme wuerde
+# den gewuenschten Moment verpassen, daher laufen beliebig viele Aufnahmen
+# gleichzeitig statt eine aktiv + Rest in Reihe). Portiert aus
+# StreamAnything/plugin.py (dort auf der Box vollstaendig verifiziert,
+# siehe Memory project_live_recording_feature).
+# ------------------------------------------------------------------
+_active_recordings = []
+_recordings_lock    = threading.Lock()
+
+
+def _get_active_recordings():
+    with _recordings_lock:
+        return list(_active_recordings)
+
+
+def _start_recording(item, duration_seconds):
+    raw_url = item.get("url", "")
+    if not raw_url:
+        return
+    name = item.get("name", "Aufnahme")
+    t = threading.Thread(target=_start_recording_bg, args=(raw_url, name, duration_seconds, None))
+    t.daemon = True
+    t.start()
+
+
+def _start_recording_from_timer(timer):
+    # Vom Scheduler (_check_recording_timers) zur geplanten Zeit aufgerufen.
+    # timer_id wird durchgereicht, damit beim Abschluss der recording_timers-
+    # Eintrag korrekt auf done/error gesetzt werden kann.
+    _catalog.update_recording_timer_status(timer.get("id"), "running")
+    t = threading.Thread(target=_start_recording_bg, args=(
+        timer.get("url", ""), timer.get("name", "Aufnahme"),
+        timer.get("duration"), timer.get("id"),
+    ))
+    t.daemon = True
+    t.start()
+
+
+def _start_recording_bg(raw_url, name, duration_seconds, timer_id):
+    # magentamusik.resolve() macht bis zu 3 sequenzielle HTTP-Requests - im
+    # Hintergrundthread, sonst friert bei einem Netzwerk-Haenger der
+    # komplette Enigma2-Prozess (inkl. WebIF, gleicher GIL) ein.
+    try:
+        from magentamusik import is_magentamusik as _is_mm, resolve as _resolve
+        url = _resolve(raw_url) if _is_mm(raw_url) else raw_url
+    except Exception:
+        url = None
+
+    def _on_finished(rec, *args):
+        _on_recording_finished(rec, *args)
+        if timer_id:
+            try:
+                _catalog.update_recording_timer_status(timer_id, "error" if args else "done")
+            except Exception:
+                pass
+
+    if not url:
+        _dbg("Aufnahme-Start fehlgeschlagen: %s nicht aufloesbar" % name)
+        if timer_id:
+            try:
+                _catalog.update_recording_timer_status(timer_id, "error")
+            except Exception:
+                pass
+        return
+
+    save_dir = _catalog.get_download_dir()
+    if not os.path.isdir(save_dir):
+        try:
+            os.makedirs(save_dir)
+        except Exception:
+            pass
+
+    rec = HLSRecorder(
+        url, name, save_dir, duration=duration_seconds,
+        on_done=_on_finished, on_error=_on_finished,
+    )
+    with _recordings_lock:
+        _active_recordings.append(rec)
+    rec.start()
+
+
+def _on_recording_finished(rec, *args):
+    # Gemeinsamer Callback fuer on_done (rec) und on_error (rec, err) -
+    # in beiden Faellen einfach aus der Liste der laufenden Aufnahmen
+    # entfernen, Fehlerdetails landen ohnehin nur im Debug-Log.
+    with _recordings_lock:
+        if rec in _active_recordings:
+            _active_recordings.remove(rec)
+    if args:
+        _dbg("Aufnahme-Fehler: %s - %s" % (rec.title, args[0]))
+    else:
+        _dbg("Aufnahme fertig: %s -> %s" % (rec.title, rec.filepath))
+
+
+def _cancel_recording(rec):
+    rec.cancel()
+
+
+# ------------------------------------------------------------------
+# Deep-Standby-Wecktimer: ein reiner "justplay"-Eintrag im nativen
+# Enigma2-RecordTimer-System, der NICHTS aufnimmt - er dient ausschliesslich
+# dazu, die Box rechtzeitig aus dem Deep-Standby zu wecken (Enigma2s
+# RTC-Aufwach-Mechanismus beruecksichtigt alle anstehenden Timer-Eintraege,
+# nicht nur echte Aufnahmen). Der tatsaechliche Aufnahme-Start passiert
+# danach ausschliesslich ueber unseren eigenen Scheduler weiter unten,
+# sobald die Box wieder laeuft. dontSave=True haelt ihn aus der dauerhaft
+# gespeicherten Timer-Liste raus - nach einem echten Reboot wird er daher
+# in _start_scheduler() fuer alle noch offenen Timer frisch neu registriert.
+# ------------------------------------------------------------------
+_WAKEUP_NAME_PREFIX = "MagentaMusik-Wecktimer: "
+
+
+def _register_wakeup_timer(timer_id, name, start_time):
+    try:
+        import NavigationInstance
+        if NavigationInstance.instance is None:
+            _dbg("Wecktimer-Registrierung: NavigationInstance.instance ist None")
+            return
+        from RecordTimer import RecordTimerEntry
+        from ServiceReference import ServiceReference
+        ref = NavigationInstance.instance.getCurrentlyPlayingServiceReference()
+        if ref is None:
+            from enigma import eServiceReference
+            ref = eServiceReference(eServiceReference.idDVB, 0)
+        # Eigener Name statt des aktuell laufenden Senders, damit der reine
+        # Wecktimer in der nativen Timer-Liste nicht mit einem zufaelligen/
+        # verwirrenden Kanalnamen auftaucht (Zap-Ziel bleibt unveraendert,
+        # nur die Anzeige wird ueberschrieben).
+        ref.setName(_b("MagentaMusik"))
+        begin = int(start_time)
+        end   = begin + 300
+        entry_name = _u(_WAKEUP_NAME_PREFIX) + u"%s [%s]" % (_u(name), timer_id)
+        entry = RecordTimerEntry(ServiceReference(ref), begin, end, _b(entry_name), _b(""), None, justplay=True)
+        entry.dontSave = True
+        NavigationInstance.instance.RecordTimer.record(entry)
+        _dbg("Wecktimer registriert: %s @ %s" % (entry_name, begin))
+    except Exception as e:
+        _dbg("Wecktimer-Registrierung fehlgeschlagen: %s" % e)
+
+
+def _unregister_wakeup_timer(timer_id):
+    try:
+        import NavigationInstance
+        if NavigationInstance.instance is None:
+            return
+        rt = NavigationInstance.instance.RecordTimer
+        suffix = u"[%s]" % timer_id
+        for entry in list(rt.timer_list) + list(rt.processed_timers):
+            ename = _u(entry.name) if entry.name else u""
+            if ename.startswith(_u(_WAKEUP_NAME_PREFIX)) and ename.endswith(suffix):
+                rt.removeEntry(entry)
+    except Exception as e:
+        _dbg("Wecktimer-Entfernung fehlgeschlagen: %s" % e)
+
+
+# ------------------------------------------------------------------
+# Timer-Scheduler: prueft periodisch, ob ein geplanter recording_timer
+# faellig ist. Laeuft unabhaengig davon, ob die Plugin-GUI offen ist
+# (gestartet aus autostart() bei Enigma2-Boot) - deckt zusammen mit dem
+# Wecktimer oben sowohl "Box an"/normales Standby als auch Deep-Standby ab.
+# ------------------------------------------------------------------
+_scheduler_timer = None
+_TIMER_LATE_GRACE_SECONDS = 600  # mehr als 10min zu spaet -> Box war vermutlich aus, nicht mehr sinnvoll starten
+
+
+def _check_recording_timers():
+    import time as _time
+    now = _time.time()
+    for t in _catalog.get_recording_timers():
+        if t.get("status") != "pending":
+            continue
+        start = t.get("start_time", 0)
+        if now < start:
+            continue
+        _unregister_wakeup_timer(t.get("id"))
+        if now - start > _TIMER_LATE_GRACE_SECONDS:
+            _catalog.update_recording_timer_status(t.get("id"), "error")
+            _dbg("Timer verpasst (Box vermutlich aus): %s" % t.get("name"))
+            continue
+        _start_recording_from_timer(t)
+
+
+_wakeup_reregister_timer = None
+
+
+def _reregister_wakeup_timers():
+    # Nach einem echten Reboot/GUI-Neustart sind alle dontSave=True-
+    # Wecktimer weg (siehe _register_wakeup_timer) - fuer alle noch offenen
+    # Timer frisch neu registrieren, sonst wuerde ein geplanter Deep-
+    # Standby-Wakeup nach einem Neustart verpasst. Laeuft verzoegert (siehe
+    # _start_scheduler), weil NavigationInstance.instance direkt beim
+    # Boot/Plugin-Start noch None ist (Session ist da noch nicht bereit).
+    pending = [t for t in _catalog.get_recording_timers() if t.get("status") == "pending"]
+    _dbg("_reregister_wakeup_timers: %d pending Timer" % len(pending))
+    for t in pending:
+        _register_wakeup_timer(t.get("id"), t.get("name", "Aufnahme"), t.get("start_time", 0))
+
+
+def _start_scheduler():
+    global _scheduler_timer, _wakeup_reregister_timer
+    if _scheduler_timer is not None:
+        return
+    _scheduler_timer = eTimer()
+    _scheduler_timer.callback.append(_check_recording_timers)
+    _scheduler_timer.start(30000, False)
+
+    _wakeup_reregister_timer = eTimer()
+    _wakeup_reregister_timer.callback.append(_reregister_wakeup_timers)
+    _wakeup_reregister_timer.start(8000, True)
+
+
+def _open_record_duration_menu(session, item):
+    presets = [
+        ("30 Minuten",     30 * 60),
+        ("1 Stunde",       60 * 60),
+        ("2 Stunden",      2 * 60 * 60),
+        ("3 Stunden",      3 * 60 * 60),
+        ("6 Stunden",      6 * 60 * 60),
+        ("Bis ich stoppe", None),
+    ]
+    choices = [(_b(label), seconds) for label, seconds in presets]
+    choices.append((_b("Eigene Dauer (Minuten) …"), "custom"))
+    choices.append((_b("Für später planen …"), "schedule"))
+
+    def on_custom_minutes(text):
+        if not text:
+            return
+        try:
+            minutes = int(_u(text).strip())
+        except (ValueError, TypeError):
+            return
+        if minutes <= 0:
+            return
+        _start_recording(item, minutes * 60)
+
+    def on_duration(choice):
+        if choice is None:
+            return
+        if choice[1] == "custom":
+            session.openWithCallback(on_custom_minutes, VirtualKeyBoard,
+                                     title=_b("Dauer in Minuten eingeben:"), text="")
+        elif choice[1] == "schedule":
+            _open_native_timer_editor(session, item)
+        else:
+            _start_recording(item, choice[1])
+
+    session.openWithCallback(on_duration, ChoiceBox,
+                             title=_b("Aufnahmedauer wählen"), list=choices)
+
+
+def _open_native_timer_editor(session, item):
+    # Nutzt Enigma2s eingebauten Timer-Editor NUR als Eingabemaske fuer
+    # Start-/Endzeit (native Datum/Uhrzeit-Spinner, viel angenehmer per
+    # Fernbedienung als Texteingabe). Der editierte Eintrag wird NICHT
+    # selbst als nativer Timer registriert - es werden nur begin/end aus
+    # dem Ergebnis ausgelesen und daraus ganz normal ein eigener
+    # recording_timer angelegt, inkl. Wecktimer.
+    try:
+        from Screens.TimerEntry import TimerEntry
+        from ServiceReference import ServiceReference
+        from RecordTimer import RecordTimerEntry
+        import NavigationInstance
+        import time as _time
+
+        ref = None
+        if NavigationInstance.instance is not None:
+            ref = NavigationInstance.instance.getCurrentlyPlayingServiceReference()
+        if ref is None:
+            from enigma import eServiceReference
+            ref = eServiceReference(eServiceReference.idDVB, 0)
+        ref.setName(_b("MagentaMusik"))
+
+        name  = item.get("name", "Aufnahme")
+        begin = int(_time.time()) + 3600
+        end   = begin + 3600
+        draft = RecordTimerEntry(ServiceReference(ref), begin, end, _b(name), _b(""), None, justplay=True)
+
+        def on_edited(answer):
+            if not answer or not answer[0]:
+                return
+            entry = answer[1]
+            timer = _catalog.add_recording_timer(
+                item.get("name", "Aufnahme"), item.get("url", ""),
+                entry.begin, "", max(60, entry.end - entry.begin),
+            )
+            _register_wakeup_timer(timer["id"], timer["name"], timer["start_time"])
+
+        session.openWithCallback(on_edited, TimerEntry, draft)
+    except Exception as e:
+        _dbg("Nativer Timer-Editor fehlgeschlagen: %s" % e)
+
+
+class MagentaMusikRecordingsScreen(Screen):
+    if IS_FHD:
+        skin = """
+        <screen name="MagentaMusikRecordingsScreen" position="360,175" size="1200,730" flags="wfNoBorder">
+            <eLabel position="0,0" size="1200,730" backgroundColor="#33000000" zPosition="-6" />
+            <eLabel position="0,0" size="1200,4" backgroundColor="#cc0066" zPosition="1" />
+            <widget name="title_label" position="40,30"  size="1120,60"  font="Regular;36" halign="center" foregroundColor="#00cc0066" transparent="1" />
+            <eLabel position="40,110" size="1120,2" backgroundColor="#44FFFFFF" zPosition="1" />
+            <widget name="rec_label"  position="40,130" size="1120,540" font="Regular;28" halign="left" valign="top" foregroundColor="#FFFFFF" transparent="1" />
+            <eLabel position="40,690" size="8,40" backgroundColor="#CC0000" zPosition="2" />
+            <widget name="hint_red"   position="56,684"  size="500,50" font="Regular;28" halign="left"  valign="center" foregroundColor="#CCCCCC" transparent="1" />
+            <widget name="hint_exit"  position="780,684" size="380,50" font="Regular;28" halign="right" valign="center" foregroundColor="#AAAAAA" transparent="1" />
+        </screen>"""
+    else:
+        skin = """
+        <screen name="MagentaMusikRecordingsScreen" position="240,116" size="800,488" flags="wfNoBorder">
+            <eLabel position="0,0" size="800,488" backgroundColor="#33000000" zPosition="-6" />
+            <eLabel position="0,0" size="800,3" backgroundColor="#cc0066" zPosition="1" />
+            <widget name="title_label" position="27,20"  size="746,40"  font="Regular;24" halign="center" foregroundColor="#00cc0066" transparent="1" />
+            <eLabel position="27,72" size="746,2" backgroundColor="#44FFFFFF" zPosition="1" />
+            <widget name="rec_label"  position="27,82"  size="746,358" font="Regular;19" halign="left" valign="top" foregroundColor="#FFFFFF" transparent="1" />
+            <eLabel position="27,452" size="5,27" backgroundColor="#CC0000" zPosition="2" />
+            <widget name="hint_red"   position="38,449"  size="330,33" font="Regular;19" halign="left"  valign="center" foregroundColor="#CCCCCC" transparent="1" />
+            <widget name="hint_exit"  position="520,449" size="253,33" font="Regular;19" halign="right" valign="center" foregroundColor="#AAAAAA" transparent="1" />
+        </screen>"""
+
+    def __init__(self, session):
+        Screen.__init__(self, session)
+        self._sel = 0
+
+        self["title_label"] = Label(_b("Aufnahmen"))
+        self["rec_label"]   = Label(_b(""))
+        self["hint_red"]    = Label(_b("Markierte Aufnahme stoppen"))
+        self["hint_exit"]   = Label(_b("EXIT = Schließen"))
+
+        self["actions"] = ActionMap(
+            ["OkCancelActions", "DirectionActions", "ColorActions"],
+            {
+                "cancel":       self.close,
+                "ok":           self.close,
+                "up":           lambda: self._move(-1),
+                "down":         lambda: self._move(1),
+                "upRepeated":   lambda: self._move(-1),
+                "downRepeated": lambda: self._move(1),
+                "red":          self._stop_selected,
+            },
+            -1,
+        )
+
+        self._poll_timer = eTimer()
+        self._poll_timer.callback.append(self._poll)
+        self._poll_timer.start(1000, False)
+        self.onClose.append(self.__stop_timer)
+        self._poll()
+
+    def __stop_timer(self):
+        try:
+            self._poll_timer.stop()
+        except Exception:
+            pass
+
+    def _move(self, delta):
+        recs = _get_active_recordings()
+        if not recs:
+            return
+        self._sel = (self._sel + delta) % len(recs)
+        self._render(recs)
+
+    def _stop_selected(self):
+        recs = _get_active_recordings()
+        if not recs or self._sel >= len(recs):
+            return
+        _cancel_recording(recs[self._sel])
+
+    def _poll(self):
+        recs = _get_active_recordings()
+        if self._sel >= len(recs):
+            self._sel = max(0, len(recs) - 1)
+        self._render(recs)
+
+    def _render(self, recs):
+        if not recs:
+            self["rec_label"].setText(_b("Keine laufende Aufnahme"))
+            return
+        lines = []
+        for i, rec in enumerate(recs):
+            marker = "> " if i == self._sel else "   "
+            title  = _u(rec.title)
+            limit  = format_duration(rec.duration) if rec.duration else "unbegrenzt"
+            lines.append(u"%s%s\n   %s / %s  -  %s" % (
+                marker, title, format_duration(rec.elapsed()), limit, format_size(rec._downloaded)
+            ))
+        self["rec_label"].setText(_b(u"\n\n".join(lines)))
+
+
+# ------------------------------------------------------------------
 # Gemeinsame Kachel-/Listen-Engine fuer Festival- und Item-Screen
 # ------------------------------------------------------------------
 class _BrowseScreenBase(Screen):
@@ -1211,8 +1601,8 @@ class _BrowseScreenBase(Screen):
 
         self["title"]       = Label(_b(title))
         self["status"]      = Label(_b(""))
-        self["hint_ok"]     = Label(_b(""))
-        self["hint_ch"]     = Label(_b("CH+/- = Seite"))
+        self["hint_menu"]   = Label(_b(""))
+        self["hint_info"]   = Label(_b(""))
         self["hint_yellow"] = Label(_b(""))
         self["hint_green"]  = Label(_b("Einstellungen"))
         self["hint_red"]    = Label(_b(""))
@@ -1247,7 +1637,7 @@ class _BrowseScreenBase(Screen):
 
         self["actions"] = ActionMap(
             ["OkCancelActions", "DirectionActions", "ColorActions",
-             "ChannelSelectBaseActions"],
+             "ChannelSelectBaseActions", "MenuActions", "EPGSelectActions"],
             {
                 "ok":                self._ok,
                 "playpauseService":  self._ok,
@@ -1264,6 +1654,8 @@ class _BrowseScreenBase(Screen):
                 "yellow":            self._key_yellow,
                 "red":               self._key_red,
                 "blue":              self._key_blue,
+                "menu":              self._key_menu,
+                "info":              self._key_info,
             },
             -1,
         )
@@ -1365,6 +1757,15 @@ class _BrowseScreenBase(Screen):
             _cancel_all_downloads, _cancel_current_download,
         )
 
+    def _key_menu(self):
+        item = self._selected_item()
+        if not item or not item.get("is_live"):
+            return
+        _open_record_duration_menu(self.session, item)
+
+    def _key_info(self):
+        self.session.open(MagentaMusikRecordingsScreen)
+
     def _flash_status(self, msg, ms=2500):
         self["status"].setText(_b(msg))
         if self._flash_timer is not None:
@@ -1464,8 +1865,6 @@ class _BrowseScreenBase(Screen):
         self._sel = min(self._sel, max(0, len(page_items) - 1))
         self._update_sel_marker()
 
-        page_label = "Seite %d/%d" % (self._page + 1, pages) if pages > 1 else ""
-        self["page_label"].setText(_b(page_label))
         self._update_legend()
 
     def _render_list(self):
@@ -1502,8 +1901,6 @@ class _BrowseScreenBase(Screen):
                 self._clear_list_logo(i)
                 self._clear_list_type_icon(i)
 
-        count_str = "%d/%d" % (self._list_sel + 1, total) if total > 0 else ""
-        self["page_label"].setText(_b(count_str))
         self._update_legend()
 
     def _clear_all_tiles(self):
@@ -1662,18 +2059,16 @@ class _BrowseScreenBase(Screen):
             self["hint_yellow"].setText(_b("Kacheln"))
         else:
             self["hint_yellow"].setText(_b("Liste"))
-        if item and item.get("type") == "folder":
-            self["hint_ok"].setText(_b("OK = Öffnen"))
-        else:
-            self["hint_ok"].setText(_b("OK = Abspielen"))
         self["hint_red"].setText(_b("Download") if item and item.get("type") == "stream" else _b(""))
+        self["hint_menu"].setText(_b("MENU = Aufnahme") if item and item.get("is_live") else _b(""))
+        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() else _b(""))
 
         if self._list_mode:
             total = len(self._items)
             self["page_label"].setText(_b("%d/%d" % (self._list_sel + 1, total) if total > 0 else ""))
-            self["hint_ch"].setText(_b(""))
         else:
-            self["hint_ch"].setText(_b("CH+/- = Seite blättern"))
+            pages = max(1, (len(self._items) + TILES_PER_PAGE - 1) // TILES_PER_PAGE)
+            self["page_label"].setText(_b("CH+/- Seite %d/%d" % (self._page + 1, pages)) if pages > 1 else _b(""))
 
     def _load_type_icon(self, idx, item_type):
         if not _LoadPixmap or not _Pixmap:
@@ -1882,6 +2277,13 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
 
     def _fetch_items(self):
         items = []
+        items.append({
+            "type":      "live",
+            "name":      u"ZDF live (Test)",
+            "url":       "https://zdf-hls-15.akamaized.net/hls/live/2016498/de/high/master.m3u8",
+            "is_live":   True,
+            "image_url": None,
+        })
         for live in _catalog.get_live_stages():
             items.append({
                 "type":      "live",
@@ -1971,6 +2373,7 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
                 "name":      it["headline"],
                 "url":       it["url"],
                 "image_url": it.get("image_url"),
+                "is_live":   it.get("is_live", False),
             })
         return out
 
@@ -2036,6 +2439,18 @@ def main(session, **kwargs):
     session.open(MagentaMusikFestivalScreen)
 
 
+def autostart(reason, **kwargs):
+    if reason != 0:
+        return
+    # Timer-Scheduler laeuft unabhaengig davon, ob die Plugin-GUI gerade
+    # offen ist - geplante Aufnahmen sollen auch dann feuern, wenn niemand
+    # im Menue ist.
+    try:
+        _start_scheduler()
+    except Exception:
+        pass
+
+
 def Plugins(**kwargs):
     return [
         PluginDescriptor(
@@ -2044,5 +2459,10 @@ def Plugins(**kwargs):
             where       = PluginDescriptor.WHERE_PLUGINMENU,
             icon        = b"plugin.png",
             fnc         = main,
+        ),
+        PluginDescriptor(
+            name  = b"MagentaMusik",
+            where = PluginDescriptor.WHERE_AUTOSTART,
+            fnc   = autostart,
         ),
     ]

@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import time
+import uuid
 
 try:
     import ssl
@@ -519,6 +520,7 @@ _SETTINGS_DEFAULTS = {
     "debug_log":                False,
     "download_dir":             DEFAULT_DOWNLOAD_DIR,
     "download_convert_ts":      False,
+    "recording_timers":         [],
 }
 
 
@@ -570,4 +572,57 @@ def get_download_convert_ts():
 def set_download_convert_ts(enabled):
     s = get_settings()
     s["download_convert_ts"] = bool(enabled)
+    save_settings(s)
+
+
+# ------------------------------------------------------------------
+# Aufnahme-Timer (geplante Live-Aufnahmen, siehe player.HLSRecorder)
+# ------------------------------------------------------------------
+
+def get_recording_timers():
+    return get_settings().get("recording_timers", [])
+
+
+def add_recording_timer(name, url, start_time, user_agent="", duration=None):
+    s = get_settings()
+    timer = {
+        "id":         str(uuid.uuid4()),
+        "name":       name,
+        "url":        url,
+        "user_agent": user_agent,
+        "start_time": int(start_time),
+        "duration":   int(duration) if duration else None,
+        "status":     "pending",
+    }
+    s.setdefault("recording_timers", []).append(timer)
+    save_settings(s)
+    return timer
+
+
+def update_recording_timer_status(timer_id, status):
+    s = get_settings()
+    for t in s.get("recording_timers", []):
+        if t.get("id") == timer_id:
+            t["status"] = status
+            break
+    save_settings(s)
+
+
+def update_recording_timer(timer_id, name, start_time, duration):
+    s = get_settings()
+    timer = None
+    for t in s.get("recording_timers", []):
+        if t.get("id") == timer_id:
+            t["name"]       = name
+            t["start_time"] = int(start_time)
+            t["duration"]   = int(duration) if duration else None
+            timer = t
+            break
+    save_settings(s)
+    return timer
+
+
+def delete_recording_timer(timer_id):
+    s = get_settings()
+    s["recording_timers"] = [t for t in s.get("recording_timers", []) if t.get("id") != timer_id]
     save_settings(s)
