@@ -1293,7 +1293,8 @@ def _cancel_recording(rec):
 # gespeicherten Timer-Liste raus - nach einem echten Reboot wird er daher
 # in _start_scheduler() fuer alle noch offenen Timer frisch neu registriert.
 # ------------------------------------------------------------------
-_WAKEUP_NAME_PREFIX = "MagentaMusik-Wecktimer: "
+_WAKEUP_NAME_PREFIX     = "MagentaMusik-Wecktimer: "
+_wakeup_reregistered    = False
 
 
 def _register_wakeup_timer(timer_id, name, start_time):
@@ -1339,6 +1340,44 @@ def _unregister_wakeup_timer(timer_id):
         _dbg("Wecktimer-Entfernung fehlgeschlagen: %s" % e)
 
 
+def _has_wakeup_timer(timer_id):
+    try:
+        import NavigationInstance
+        if NavigationInstance.instance is None:
+            return False
+        rt = NavigationInstance.instance.RecordTimer
+        suffix = u"[%s]" % timer_id
+        for entry in list(rt.timer_list) + list(rt.processed_timers):
+            ename = _u(entry.name) if entry.name else u""
+            if ename.startswith(_u(_WAKEUP_NAME_PREFIX)) and ename.endswith(suffix):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _get_valid_pending_timers():
+    """Pending-Timer aus JSON, die noch einen aktiven Wecktimer-Eintrag haben.
+    Timer, deren RecordTimerEntry im VTI-Editor extern gelöscht wurde,
+    werden dabei still aus JSON entfernt."""
+    import time as _time
+    now = _time.time()
+    result = []
+    for t in _catalog.get_recording_timers():
+        if t.get("status") != "pending":
+            continue
+        start = t.get("start_time", 0)
+        if now >= start:
+            result.append(t)
+            continue
+        if not _wakeup_reregistered or _has_wakeup_timer(t.get("id")):
+            result.append(t)
+        else:
+            _catalog.delete_recording_timer(t.get("id"))
+            _dbg("Wecktimer extern geloescht (VTI?), JSON-Eintrag entfernt: %s" % t.get("name"))
+    return result
+
+
 # ------------------------------------------------------------------
 # Timer-Scheduler: prueft periodisch, ob ein geplanter recording_timer
 # faellig ist. Laeuft unabhaengig davon, ob die Plugin-GUI offen ist
@@ -1352,9 +1391,7 @@ _TIMER_LATE_GRACE_SECONDS = 600  # mehr als 10min zu spaet -> Box war vermutlich
 def _check_recording_timers():
     import time as _time
     now = _time.time()
-    for t in _catalog.get_recording_timers():
-        if t.get("status") != "pending":
-            continue
+    for t in _get_valid_pending_timers():
         start = t.get("start_time", 0)
         if now < start:
             continue
@@ -1376,10 +1413,12 @@ def _reregister_wakeup_timers():
     # Standby-Wakeup nach einem Neustart verpasst. Laeuft verzoegert (siehe
     # _start_scheduler), weil NavigationInstance.instance direkt beim
     # Boot/Plugin-Start noch None ist (Session ist da noch nicht bereit).
+    global _wakeup_reregistered
     pending = [t for t in _catalog.get_recording_timers() if t.get("status") == "pending"]
     _dbg("_reregister_wakeup_timers: %d pending Timer" % len(pending))
     for t in pending:
         _register_wakeup_timer(t.get("id"), t.get("name", "Aufnahme"), t.get("start_time", 0))
+    _wakeup_reregistered = True
 
 
 def _start_scheduler():
@@ -1539,8 +1578,7 @@ class MagentaMusikRecordingsScreen(Screen):
 
     def _get_items(self):
         active  = [("active",  rec) for rec in _get_active_recordings()]
-        pending = [("pending", t)   for t in _catalog.get_recording_timers()
-                   if t.get("status") == "pending"]
+        pending = [("pending", t)   for t in _get_valid_pending_timers()]
         return active + pending
 
     def _move(self, delta):
@@ -2078,8 +2116,7 @@ class _BrowseScreenBase(Screen):
             self["hint_yellow"].setText(_b("Liste"))
         self["hint_red"].setText(_b("Download") if item and item.get("type") == "stream" else _b(""))
         self["hint_menu"].setText(_b("MENU = Aufnahme") if item and item.get("is_live") else _b(""))
-        _has_pending = any(t.get("status") == "pending" for t in _catalog.get_recording_timers())
-        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() or _has_pending else _b(""))
+        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() or _get_valid_pending_timers() else _b(""))
 
         if self._list_mode:
             total = len(self._items)
