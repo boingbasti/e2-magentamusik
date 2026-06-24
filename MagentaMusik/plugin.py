@@ -1199,12 +1199,12 @@ def _get_active_recordings():
         return list(_active_recordings)
 
 
-def _start_recording(item, duration_seconds):
+def _start_recording(item, duration_seconds, on_started=None):
     raw_url = item.get("url", "")
     if not raw_url:
         return
     name = item.get("name", "Aufnahme")
-    t = threading.Thread(target=_start_recording_bg, args=(raw_url, name, duration_seconds, None))
+    t = threading.Thread(target=_start_recording_bg, args=(raw_url, name, duration_seconds, None, on_started))
     t.daemon = True
     t.start()
 
@@ -1222,7 +1222,7 @@ def _start_recording_from_timer(timer):
     t.start()
 
 
-def _start_recording_bg(raw_url, name, duration_seconds, timer_id):
+def _start_recording_bg(raw_url, name, duration_seconds, timer_id, on_started=None):
     # magentamusik.resolve() macht bis zu 3 sequenzielle HTTP-Requests - im
     # Hintergrundthread, sonst friert bei einem Netzwerk-Haenger der
     # komplette Enigma2-Prozess (inkl. WebIF, gleicher GIL) ein.
@@ -1262,6 +1262,12 @@ def _start_recording_bg(raw_url, name, duration_seconds, timer_id):
     )
     with _recordings_lock:
         _active_recordings.append(rec)
+    if on_started:
+        try:
+            from twisted.internet import reactor
+            reactor.callFromThread(on_started)
+        except Exception:
+            on_started()
     rec.start()
 
 
@@ -1460,8 +1466,7 @@ def _open_record_duration_menu(session, item, post_callback=None):
             return
         if minutes <= 0:
             return
-        _start_recording(item, minutes * 60)
-        _notify()
+        _start_recording(item, minutes * 60, on_started=_notify)
 
     def on_duration(choice):
         if choice is None:
@@ -1472,8 +1477,7 @@ def _open_record_duration_menu(session, item, post_callback=None):
         elif choice[1] == "schedule":
             _open_native_timer_editor(session, item, post_callback=_notify)
         else:
-            _start_recording(item, choice[1])
-            _notify()
+            _start_recording(item, choice[1], on_started=_notify)
 
     session.openWithCallback(on_duration, ChoiceBox,
                              title=_b("Aufnahmedauer wählen"), list=choices)
