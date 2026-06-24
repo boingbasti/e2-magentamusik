@@ -2001,6 +2001,8 @@ class _BrowseScreenBase(Screen):
             return None
         image_url = item.get("image_url")
         if not image_url:
+            if item.get("is_live"):
+                return os.path.join(PLUGIN_DIR, "live_placeholder.jpg")
             return None
         path = _catalog.cover_path_for(image_url)
         if path and os.path.isfile(path):
