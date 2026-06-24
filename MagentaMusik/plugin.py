@@ -1434,7 +1434,7 @@ def _start_scheduler():
     _wakeup_reregister_timer.start(8000, True)
 
 
-def _open_record_duration_menu(session, item):
+def _open_record_duration_menu(session, item, post_callback=None):
     presets = [
         ("30 Minuten",     30 * 60),
         ("1 Stunde",       60 * 60),
@@ -1447,6 +1447,10 @@ def _open_record_duration_menu(session, item):
     choices.append((_b("Eigene Dauer (Minuten) …"), "custom"))
     choices.append((_b("Für später planen …"), "schedule"))
 
+    def _notify():
+        if post_callback:
+            post_callback()
+
     def on_custom_minutes(text):
         if not text:
             return
@@ -1457,6 +1461,7 @@ def _open_record_duration_menu(session, item):
         if minutes <= 0:
             return
         _start_recording(item, minutes * 60)
+        _notify()
 
     def on_duration(choice):
         if choice is None:
@@ -1465,15 +1470,16 @@ def _open_record_duration_menu(session, item):
             session.openWithCallback(on_custom_minutes, VirtualKeyBoard,
                                      title=_b("Dauer in Minuten eingeben:"), text="")
         elif choice[1] == "schedule":
-            _open_native_timer_editor(session, item)
+            _open_native_timer_editor(session, item, post_callback=_notify)
         else:
             _start_recording(item, choice[1])
+            _notify()
 
     session.openWithCallback(on_duration, ChoiceBox,
                              title=_b("Aufnahmedauer wählen"), list=choices)
 
 
-def _open_native_timer_editor(session, item):
+def _open_native_timer_editor(session, item, post_callback=None):
     # Nutzt Enigma2s eingebauten Timer-Editor NUR als Eingabemaske fuer
     # Start-/Endzeit (native Datum/Uhrzeit-Spinner, viel angenehmer per
     # Fernbedienung als Texteingabe). Der editierte Eintrag wird NICHT
@@ -1501,14 +1507,15 @@ def _open_native_timer_editor(session, item):
         draft = RecordTimerEntry(ServiceReference(ref), begin, end, _b(name), _b(""), None, justplay=True)
 
         def on_edited(answer):
-            if not answer or not answer[0]:
-                return
-            entry = answer[1]
-            timer = _catalog.add_recording_timer(
-                item.get("name", "Aufnahme"), item.get("url", ""),
-                entry.begin, "", max(60, entry.end - entry.begin),
-            )
-            _register_wakeup_timer(timer["id"], timer["name"], timer["start_time"])
+            if answer and answer[0]:
+                entry = answer[1]
+                timer = _catalog.add_recording_timer(
+                    item.get("name", "Aufnahme"), item.get("url", ""),
+                    entry.begin, "", max(60, entry.end - entry.begin),
+                )
+                _register_wakeup_timer(timer["id"], timer["name"], timer["start_time"])
+            if post_callback:
+                post_callback()
 
         session.openWithCallback(on_edited, TimerEntry, draft)
     except Exception as e:
@@ -1816,9 +1823,11 @@ class _BrowseScreenBase(Screen):
         item = self._selected_item()
         if not item or not item.get("is_live"):
             return
-        _open_record_duration_menu(self.session, item)
+        _open_record_duration_menu(self.session, item, post_callback=self._update_legend)
 
     def _key_info(self):
+        if not _get_active_recordings() and not _get_valid_pending_timers():
+            return
         self.session.openWithCallback(lambda *_: self._update_legend(), MagentaMusikRecordingsScreen)
 
     def _flash_status(self, msg, ms=2500):
@@ -2116,7 +2125,7 @@ class _BrowseScreenBase(Screen):
             self["hint_yellow"].setText(_b("Liste"))
         self["hint_red"].setText(_b("Download") if item and item.get("type") == "stream" else _b(""))
         self["hint_menu"].setText(_b("MENU = Aufnahme") if item and item.get("is_live") else _b(""))
-        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() or _get_valid_pending_timers() else _b(""))
+        self["hint_info"].setText(_b("INFO = Aufnahmen") if _get_active_recordings() or _get_valid_pending_timers() else _b(""))
 
         if self._list_mode:
             total = len(self._items)
