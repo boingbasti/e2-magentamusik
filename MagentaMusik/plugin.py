@@ -2407,10 +2407,13 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
             if not url_str:
                 self._render()
                 return
+            live_items = [it for it in self._items if it.get("type") != "folder"]
+            live_idx   = next((i for i, it in enumerate(live_items) if it is item), 0)
             play_resolved_stream(
                 self.session, url_str, title=item.get("name", "Live"), is_live=True,
                 user_agent=user_agent,
                 autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
+                streams=live_items, stream_index=live_idx,
             )
             self._render()
 
