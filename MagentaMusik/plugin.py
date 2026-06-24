@@ -1508,7 +1508,7 @@ class MagentaMusikRecordingsScreen(Screen):
 
         self["title_label"] = Label(_b("Aufnahmen"))
         self["rec_label"]   = Label(_b(""))
-        self["hint_red"]    = Label(_b("Markierte Aufnahme stoppen"))
+        self["hint_red"]    = Label(_b("Markierte Aufnahme/Timer stoppen"))
         self["hint_exit"]   = Label(_b("EXIT = Schließen"))
 
         self["actions"] = ActionMap(
@@ -1537,37 +1537,54 @@ class MagentaMusikRecordingsScreen(Screen):
         except Exception:
             pass
 
+    def _get_items(self):
+        active  = [("active",  rec) for rec in _get_active_recordings()]
+        pending = [("pending", t)   for t in _catalog.get_recording_timers()
+                   if t.get("status") == "pending"]
+        return active + pending
+
     def _move(self, delta):
-        recs = _get_active_recordings()
-        if not recs:
+        items = self._get_items()
+        if not items:
             return
-        self._sel = (self._sel + delta) % len(recs)
-        self._render(recs)
+        self._sel = (self._sel + delta) % len(items)
+        self._render(items)
 
     def _stop_selected(self):
-        recs = _get_active_recordings()
-        if not recs or self._sel >= len(recs):
+        items = self._get_items()
+        if not items or self._sel >= len(items):
             return
-        _cancel_recording(recs[self._sel])
+        kind, obj = items[self._sel]
+        if kind == "active":
+            _cancel_recording(obj)
+        else:
+            _catalog.delete_recording_timer(obj["id"])
+            _unregister_wakeup_timer(obj["id"])
 
     def _poll(self):
-        recs = _get_active_recordings()
-        if self._sel >= len(recs):
-            self._sel = max(0, len(recs) - 1)
-        self._render(recs)
+        items = self._get_items()
+        if self._sel >= len(items):
+            self._sel = max(0, len(items) - 1)
+        self._render(items)
 
-    def _render(self, recs):
-        if not recs:
-            self["rec_label"].setText(_b("Keine laufende Aufnahme"))
+    def _render(self, items):
+        import time as _time
+        if not items:
+            self["rec_label"].setText(_b("Keine laufende Aufnahme oder geplanter Timer"))
             return
         lines = []
-        for i, rec in enumerate(recs):
-            marker = "> " if i == self._sel else "   "
-            title  = _u(rec.title)
-            limit  = format_duration(rec.duration) if rec.duration else "unbegrenzt"
-            lines.append(u"%s%s\n   %s / %s  -  %s" % (
-                marker, title, format_duration(rec.elapsed()), limit, format_size(rec._downloaded)
-            ))
+        for i, (kind, obj) in enumerate(items):
+            marker = u"> " if i == self._sel else u"   "
+            if kind == "active":
+                title = _u(obj.title)
+                limit = format_duration(obj.duration) if obj.duration else u"unbegrenzt"
+                lines.append(u"%s%s\n   %s / %s  -  %s" % (
+                    marker, title, format_duration(obj.elapsed()), limit, format_size(obj._downloaded)
+                ))
+            else:
+                title = _u(obj.get("name", u"?"))
+                when  = _time.strftime("%d.%m. %H:%M", _time.localtime(obj.get("start_time", 0)))
+                lines.append(u"%sgeplant: %s\n   %s" % (marker, when, title))
         self["rec_label"].setText(_b(u"\n\n".join(lines)))
 
 
@@ -1764,7 +1781,7 @@ class _BrowseScreenBase(Screen):
         _open_record_duration_menu(self.session, item)
 
     def _key_info(self):
-        self.session.open(MagentaMusikRecordingsScreen)
+        self.session.openWithCallback(lambda *_: self._update_legend(), MagentaMusikRecordingsScreen)
 
     def _flash_status(self, msg, ms=2500):
         self["status"].setText(_b(msg))
@@ -2061,7 +2078,8 @@ class _BrowseScreenBase(Screen):
             self["hint_yellow"].setText(_b("Liste"))
         self["hint_red"].setText(_b("Download") if item and item.get("type") == "stream" else _b(""))
         self["hint_menu"].setText(_b("MENU = Aufnahme") if item and item.get("is_live") else _b(""))
-        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() else _b(""))
+        _has_pending = any(t.get("status") == "pending" for t in _catalog.get_recording_timers())
+        self["hint_info"].setText(_b("EPG/INFO = Aufnahmen") if _get_active_recordings() or _has_pending else _b(""))
 
         if self._list_mode:
             total = len(self._items)
