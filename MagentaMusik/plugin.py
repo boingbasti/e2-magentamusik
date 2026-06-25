@@ -2203,12 +2203,11 @@ class _BrowseScreenBase(Screen):
 
         if abs(delta) == 1:
             if delta == 1:  # rechts
-                if col < TILE_COLS - 1:
-                    new_sel = self._sel + 1
-                    if new_sel < page_count:
-                        self._sel = new_sel
-                        self._update_sel_marker()
-                        self._update_legend()
+                new_sel = self._sel + 1
+                if col < TILE_COLS - 1 and new_sel < page_count:
+                    self._sel = new_sel
+                    self._update_sel_marker()
+                    self._update_legend()
                 elif _get_setting("wrap_lr", True):
                     new_abs = (offset + self._sel + 1) % total
                     self._page = new_abs // TILES_PER_PAGE
