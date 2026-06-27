@@ -19,7 +19,7 @@ Enigma2-Plugin zum Durchsuchen und Abspielen von Festivals und Konzerten von [ma
 - Enigma2-Receiver (getestet auf **VU+ Uno 4K SE** mit **VTi**)
 - Python 2.7 (Standard in Enigma2/VTi)
 - **Empfohlen:** [ServiceApp](https://github.com/E2OpenPlugins/e2openplugin-ServiceApp) mit exteplayer3 für optimale HLS-Wiedergabe
-- **Empfohlen:** Aktuelles CA-Zertifikat-Paket (`ca-certificates-mozilla`), im Release-Archiv enthalten. Das CA-Bundle in VTi-Images ist von 2014 und kennt viele moderne Root-CAs nicht — ohne das Paket schlägt der HTTPS-Abruf von magentamusik.de stillschweigend fehl (leere Katalogliste, keine Cover). Wer bereits [StreamAnything](https://github.com/boingbasti/e2-StreamAnything) installiert hat, ist damit bereits versorgt.
+- **Empfohlen:** Aktuelles CA-Zertifikat-Paket (`ca-certificates-mozilla`), als separate Datei im Release verfügbar. Das CA-Bundle in VTi-Images ist von 2014 und kennt viele moderne Root-CAs nicht — ohne das Paket schlägt der HTTPS-Abruf von magentamusik.de stillschweigend fehl (leere Katalogliste, keine Cover). Wer bereits [StreamAnything](https://github.com/boingbasti/e2-StreamAnything) installiert hat, ist damit bereits versorgt.
 
 Ohne aktuelles CA-Bundle und ohne ServiceApp/exteplayer3 ist das Plugin technisch funktionslos: HTTPS-Verbindungen schlagen fehl und HLS-Streams laufen mit dem eingebauten GStreamer-Player nicht zuverlässig.
 
@@ -27,15 +27,15 @@ Ohne aktuelles CA-Bundle und ohne ServiceApp/exteplayer3 ist das Plugin technisc
 
 ### Methode 1: IPK-Paket (empfohlen)
 
-1. Das Release-Archiv von der [Releases-Seite](https://github.com/boingbasti/e2-magentatv/releases) herunterladen und entpacken. Es enthält:
-   - `enigma2-plugin-extensions-magentamusik_*.ipk` — das Plugin
-   - `ca-certificates-mozilla_*.ipk` — aktuelles CA-Bundle (falls noch nicht installiert)
-2. Beide `.ipk`-Dateien per FTP oder USB auf den Receiver kopieren, z. B. nach `/tmp/`.
+1. Beide Dateien vom [Release](https://github.com/boingbasti/e2-magentatv/releases) herunterladen:
+   - `enigma2-plugin-extensions-magentamusik_1.0.0_all.ipk` — das Plugin
+   - `ca-certificates-mozilla_2026.05.30_all.ipk` — aktuelles CA-Bundle (falls noch nicht installiert)
+2. Beide Dateien per FTP oder USB auf den Receiver kopieren, z. B. nach `/tmp/`.
 3. Per SSH installieren — zuerst das CA-Bundle (falls noch nicht vorhanden), dann das Plugin:
 
 ```sh
-opkg install /tmp/ca-certificates-mozilla_*.ipk
-opkg install /tmp/enigma2-plugin-extensions-magentamusik_*.ipk
+opkg install /tmp/ca-certificates-mozilla_2026.05.30_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-magentamusik_1.0.0_all.ipk
 ```
 
 Oder über den **Softwaremanager** der Box (IPK-Dateien direkt öffnen).
