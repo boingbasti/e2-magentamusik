@@ -2346,13 +2346,6 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
 
     def _fetch_items(self):
         items = []
-        items.append({
-            "type":      "live",
-            "name":      u"ZDF live (Test)",
-            "url":       "https://zdf-hls-15.akamaized.net/hls/live/2016498/de/high/master.m3u8",
-            "is_live":   True,
-            "image_url": None,
-        })
         for live in _catalog.get_live_stages():
             items.append({
                 "type":      "live",
