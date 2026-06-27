@@ -40,11 +40,7 @@ opkg install /tmp/enigma2-plugin-extensions-magentamusik_1.0.0_all.ipk
 
 Oder über den **Softwaremanager** der Box (IPK-Dateien direkt öffnen).
 
-4. Enigma2 neu starten:
-
-```sh
-killall -9 enigma2
-```
+4. GUI-Neustart durchführen.
 
 Das Plugin erscheint danach unter **Menü → Plugins → MagentaMusik**.
 
@@ -57,11 +53,7 @@ Das Plugin erscheint danach unter **Menü → Plugins → MagentaMusik**.
 scp -r MagentaMusik/ root@<IP-DER-BOX>:/usr/lib/enigma2/python/Plugins/Extensions/
 ```
 
-3. Enigma2 neu starten:
-
-```sh
-ssh root@<IP-DER-BOX> "killall -9 enigma2"
-```
+3. GUI-Neustart durchführen.
 
 ## Bedienung
 
@@ -129,15 +121,17 @@ Per SSH:
 
 ```sh
 opkg remove enigma2-plugin-extensions-magentamusik
-killall -9 enigma2
 ```
+
+Anschließend GUI-Neustart durchführen.
 
 ### Wenn manuell installiert
 
 ```sh
 rm -rf /usr/lib/enigma2/python/Plugins/Extensions/MagentaMusik
-killall -9 enigma2
 ```
+
+Anschließend GUI-Neustart durchführen.
 
 ### Einstellungen und Cache entfernen (optional)
 
