@@ -111,7 +111,7 @@ Im selben Menü gibt es den Eintrag **„Für später planen"** — damit öffne
 
 Laufende Aufnahmen und geplante Timer sind über **INFO** in der Aufnahmenübersicht einsehbar und können dort auch vorzeitig gestoppt bzw. gelöscht werden.
 
-Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar. Zu jeder Aufnahme wird eine `.eit`- und `.jpg`-Sidecar-Datei angelegt.
+Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar. Zu jedem Download werden eine `.txt`- (Titelinformationen) und eine `.meta`-Sidecar-Datei sowie ein `.jpg`-Vorschaubild angelegt.
 
 ## Deinstallation
 
