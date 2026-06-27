@@ -91,7 +91,7 @@ Die Einstellungen sind über die **BLAU**-Taste erreichbar:
 | Download-Ordner | `/media/hdd/movie/MagentaMusik` | Zielverzeichnis für Downloads |
 | Debug-Log | Aus | Erweiterte Logmeldungen in die Enigma2-Log-Datei schreiben |
 
-## Aufnahmen
+## Aufnahmen (Live-Streams)
 
 Nicht alle Konzerte sind nach dem Festival als Stream abrufbar — viele Live-Übertragungen verschwinden nach dem Event ersatzlos. Die Aufnahmefunktion ermöglicht es, Konzerte während der Live-Übertragung direkt auf der Festplatte zu sichern.
 
@@ -111,7 +111,15 @@ Im selben Menü gibt es den Eintrag **„Für später planen"** — damit öffne
 
 Laufende Aufnahmen und geplante Timer sind über **INFO** in der Aufnahmenübersicht einsehbar und können dort auch vorzeitig gestoppt bzw. gelöscht werden.
 
-Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar. Zu jedem Download werden eine `.txt`- (Titelinformationen) und eine `.meta`-Sidecar-Datei sowie ein `.jpg`-Vorschaubild angelegt.
+Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar.
+
+## Downloads (VOD-Inhalte)
+
+Bereits archivierte Konzerte lassen sich mit der **ROT**-Taste direkt auf die Festplatte herunterladen. Der Download läuft im Hintergrund — das Plugin bleibt währenddessen voll bedienbar, weitere Downloads werden in eine Warteschlange eingereiht.
+
+Über **BLAU** lässt sich der Download-Manager öffnen (erscheint nur wenn ein Download aktiv ist), um den Fortschritt einzusehen oder Downloads abzubrechen.
+
+Neben der `.ts`-Videodatei werden automatisch eine `.txt`-Infodatei, eine `.meta`-Datei sowie ein `.jpg`-Vorschaubild angelegt.
 
 ## Deinstallation
 
