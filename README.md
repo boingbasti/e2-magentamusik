@@ -27,7 +27,7 @@ Ohne aktuelles CA-Bundle und ohne ServiceApp/exteplayer3 ist das Plugin technisc
 
 ### Methode 1: IPK-Paket (empfohlen)
 
-1. Beide Dateien vom [Release](https://github.com/boingbasti/e2-magentatv/releases) herunterladen:
+1. Beide Dateien vom [Release](https://github.com/boingbasti/e2-magentamusik/releases) herunterladen:
    - `enigma2-plugin-extensions-magentamusik_1.0.0_all.ipk` — das Plugin
    - `ca-certificates-mozilla_2026.05.30_all.ipk` — aktuelles CA-Bundle (falls noch nicht installiert)
 2. Beide Dateien per FTP oder USB auf den Receiver kopieren, z. B. nach `/tmp/`.
