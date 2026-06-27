@@ -1108,7 +1108,7 @@ def _queue_next_worker():
         dl.start()
     except Exception as e:
         _dbg("_queue_next Fehler: %s" % e)
-        _queue_next_worker()
+        _queue_next()
 
 
 # Referenzzaehler statt einfachem Bool, da es bei uns (anders als OeMediathek
@@ -1731,6 +1731,7 @@ class _BrowseScreenBase(Screen):
         self._dl_poll_timer.callback.append(self._update_download_hint)
         self._dl_poll_timer.start(1000, False)
         self.onClose.append(self.__stop_dl_timer)
+        self.onClose.append(self.__stop_flash_timer)
 
         self._timer.start(50, True)
 
@@ -1739,6 +1740,14 @@ class _BrowseScreenBase(Screen):
             self._dl_poll_timer.stop()
         except Exception:
             pass
+
+    def __stop_flash_timer(self):
+        if self._flash_timer is not None:
+            try:
+                self._flash_timer.stop()
+            except Exception:
+                pass
+            self._flash_timer = None
 
     def __mark_closed(self):
         global _open_screen_count
