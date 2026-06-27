@@ -19,7 +19,7 @@ Enigma2-Plugin zum Durchsuchen und Abspielen von Festivals und Konzerten von [ma
 - Enigma2-Receiver (getestet auf **VU+ Uno 4K SE** mit **VTi**)
 - Python 2.7 (Standard in Enigma2/VTi)
 - **Empfohlen:** [ServiceApp](https://github.com/E2OpenPlugins/e2openplugin-ServiceApp) mit exteplayer3 für optimale HLS-Wiedergabe
-- **Empfohlen:** Aktuelles CA-Zertifikat-Paket (`ca-certificates-mozilla`), als separate Datei im Release verfügbar. Das CA-Bundle in VTi-Images ist von 2014 und kennt viele moderne Root-CAs nicht — ohne das Paket schlägt der HTTPS-Abruf von magentamusik.de stillschweigend fehl (leere Katalogliste, keine Cover). Wer bereits [StreamAnything](https://github.com/boingbasti/e2-StreamAnything) installiert hat, ist damit bereits versorgt.
+- **Empfohlen:** Aktuelles CA-Zertifikat-Paket (`ca-certificates-mozilla`), als separate Datei im Release verfügbar. Das CA-Bundle in VTi-Images ist von 2014 und kennt viele moderne Root-CAs nicht — ohne das Paket schlägt der HTTPS-Abruf von magentamusik.de stillschweigend fehl (leere Katalogliste, keine Cover). Wer das Paket bereits über [StreamAnything](https://github.com/boingbasti/e2-StreamAnything) installiert hat, ist damit bereits versorgt.
 
 Ohne aktuelles CA-Bundle und ohne ServiceApp/exteplayer3 ist das Plugin technisch funktionslos: HTTPS-Verbindungen schlagen fehl und HLS-Streams laufen mit dem eingebauten GStreamer-Player nicht zuverlässig.
 
