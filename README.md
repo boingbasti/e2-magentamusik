@@ -92,9 +92,19 @@ Die Einstellungen sind über die **BLAU**-Taste erreichbar:
 
 ## Aufnahmen
 
-Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind nach der Aufnahme in der Enigma2-Mediathek verfügbar. Zu jeder Aufnahme wird eine `.eit`- und `.jpg`-Sidecar-Datei angelegt.
+Nicht alle Konzerte sind nach dem Festival als Stream abrufbar — viele Live-Übertragungen verschwinden nach dem Event ersatzlos. Die Aufnahmefunktion ermöglicht es, Konzerte während der Live-Übertragung direkt auf der Festplatte zu sichern.
 
-Beim Start der Aufnahme kann die Dauer gewählt werden (15 / 30 / 60 / 120 Minuten oder eine freie Minutenzahl).
+### Sofortaufnahme
+
+ROT-Taste auf einem Live-Stream drücken → Aufnahmedauer wählen (15 / 30 / 60 / 120 Minuten oder freie Minutenzahl) → Aufnahme startet sofort.
+
+### Timer (Aufnahme vorplanen)
+
+Auch ohne aktuell laufendes Konzert lässt sich ein Timer vorplanen: ROT-Taste auf einem Live-Stream drücken und die gewünschte Startzeit sowie Dauer eingeben. Der Receiver startet die Aufnahme automatisch zum geplanten Zeitpunkt — auch aus dem Deep-Standby heraus.
+
+Laufende Aufnahmen und geplante Timer sind über **ROT** oder **INFO** in der Aufnahmenübersicht einsehbar und können dort auch vorzeitig gestoppt bzw. gelöscht werden.
+
+Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar. Zu jeder Aufnahme wird eine `.eit`- und `.jpg`-Sidecar-Datei angelegt.
 
 ## Deinstallation
 
