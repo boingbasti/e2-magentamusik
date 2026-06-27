@@ -71,11 +71,12 @@ ssh root@<IP-DER-BOX> "killall -9 enigma2"
 | **Pfeil links/rechts** | Kachelansicht: Seite wechseln (wenn Einstellung aktiv) |
 | **Pfeil oben/unten** | Kachel- / Listenbewegung |
 | **CH+ / CH-** | Im Player: nächster / vorheriger Stream |
-| **ROT** | Aufnahme starten (Live-Streams) |
-| **GRÜN** | Download starten (VOD-Inhalte) |
-| **GELB** | Aktive Aufnahmen anzeigen |
-| **BLAU** | Einstellungen öffnen |
-| **INFO** | Aktive Aufnahmen anzeigen |
+| **ROT** | Download starten (VOD-Inhalte) |
+| **GRÜN** | Einstellungen öffnen |
+| **GELB** | Zwischen Kachel- und Listenansicht wechseln |
+| **BLAU** | Download-Manager öffnen (nur bei aktiven Downloads sichtbar) |
+| **MENU** | Aufnahme starten oder planen (nur bei Live-Streams) |
+| **INFO** | Aufnahmen und Timer anzeigen (nur bei aktiven Einträgen sichtbar) |
 | **EXIT** | Zurück / Plugin schließen |
 
 ### Einstellungen
@@ -96,13 +97,19 @@ Nicht alle Konzerte sind nach dem Festival als Stream abrufbar — viele Live-Ü
 
 ### Sofortaufnahme
 
-ROT-Taste auf einem Live-Stream drücken → Aufnahmedauer wählen (15 / 30 / 60 / 120 Minuten oder freie Minutenzahl) → Aufnahme startet sofort.
+**MENU**-Taste auf einem Live-Stream drücken → Aufnahmedauer wählen:
+
+- 30 Minuten / 1 Stunde / 2 Stunden / 3 Stunden / 6 Stunden
+- Eigene Dauer in Minuten
+- Bis ich stoppe (läuft unbegrenzt bis zum manuellen Abbruch)
+
+Die Aufnahme startet sofort im Hintergrund, das Plugin bleibt dabei weiter bedienbar.
 
 ### Timer (Aufnahme vorplanen)
 
-Auch ohne aktuell laufendes Konzert lässt sich ein Timer vorplanen: ROT-Taste auf einem Live-Stream drücken und die gewünschte Startzeit sowie Dauer eingeben. Der Receiver startet die Aufnahme automatisch zum geplanten Zeitpunkt — auch aus dem Deep-Standby heraus.
+Im selben Menü gibt es den Eintrag **„Für später planen"** — damit öffnet sich der native Enigma2-Timer-Editor zur Eingabe von Datum, Startzeit und Dauer. Der Receiver startet die Aufnahme automatisch zum geplanten Zeitpunkt, auch aus dem Deep-Standby heraus.
 
-Laufende Aufnahmen und geplante Timer sind über **ROT** oder **INFO** in der Aufnahmenübersicht einsehbar und können dort auch vorzeitig gestoppt bzw. gelöscht werden.
+Laufende Aufnahmen und geplante Timer sind über **INFO** in der Aufnahmenübersicht einsehbar und können dort auch vorzeitig gestoppt bzw. gelöscht werden.
 
 Aufnahmen werden als `.ts`-Datei im **Download-Ordner** gespeichert und sind danach in der Enigma2-Mediathek verfügbar. Zu jeder Aufnahme wird eine `.eit`- und `.jpg`-Sidecar-Datei angelegt.
 
