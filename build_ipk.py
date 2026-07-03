@@ -6,10 +6,10 @@ import tarfile
 import io
 
 PLUGIN_NAME  = "enigma2-plugin-extensions-magentamusik"
-VERSION      = "1.0.0"
+VERSION      = "1.0.1"
 ARCHITECTURE = "all"
 MAINTAINER   = "saufsoldat"
-HOMEPAGE     = "https://github.com/boingbasti/e2-magentatv"
+HOMEPAGE     = "https://github.com/boingbasti/e2-magentamusik"
 DESCRIPTION  = "Festivals und Konzerte von magentamusik.de durchsuchen und abspielen"
 INSTALL_PATH = "/usr/lib/enigma2/python/Plugins/Extensions/MagentaMusik"
 
