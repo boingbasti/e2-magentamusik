@@ -4,15 +4,15 @@ import os
 import re
 
 try:
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
-except Exception:
-    pass
-
-try:
     import urllib2 as _urlreq
 except ImportError:
     import urllib.request as _urlreq
+
+try:
+    import ssl as _ssl
+    _opener = _urlreq.build_opener(_urlreq.HTTPSHandler(context=_ssl._create_unverified_context()))
+except Exception:
+    _opener = None
 
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
@@ -39,8 +39,8 @@ def is_magentamusik(url):
 
 
 def _fetch(url):
-    req  = _urlreq.Request(url, headers={"User-Agent": _UA})
-    resp = _urlreq.urlopen(req, timeout=10)
+    req = _urlreq.Request(url, headers={"User-Agent": _UA})
+    resp = (_opener.open(req, timeout=10) if _opener else _urlreq.urlopen(req, timeout=10))
     return resp.read().decode("utf-8", "replace")
 
 

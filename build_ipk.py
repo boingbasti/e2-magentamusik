@@ -4,9 +4,10 @@
 import os
 import tarfile
 import io
+import xml.etree.ElementTree as _ET
 
 PLUGIN_NAME  = "enigma2-plugin-extensions-magentamusik"
-VERSION      = "1.0.1"
+VERSION      = _ET.parse(os.path.join(os.path.dirname(__file__), "MagentaMusik", "meta.xml")).findtext("version")
 ARCHITECTURE = "all"
 MAINTAINER   = "saufsoldat"
 HOMEPAGE     = "https://github.com/boingbasti/e2-magentamusik"

@@ -27,7 +27,12 @@ try:
 except ImportError:
     _LoadPixmap = None
 
-PLUGIN_VERSION = "1.0.0"
+try:
+    import xml.etree.ElementTree as _ET
+    _meta = _ET.parse(os.path.join(os.path.dirname(__file__), "meta.xml"))
+    PLUGIN_VERSION = _meta.findtext("version") or "?"
+except Exception:
+    PLUGIN_VERSION = "?"
 
 # Manche Festivals haben inzwischen 100+ Items (siehe catalog.py-Paginierung) -
 # ein unbegrenzter Pixmap-Cache wuerde beim Durchblaettern aller Seiten immer
@@ -60,7 +65,7 @@ def _cached_pixmap(path):
 
 import catalog as _catalog
 from player import play_resolved_stream, resolve_local_playlist, HLSRecorder, format_duration
-from downloader import Downloader, convert_mp4_to_ts, format_size
+from downloader import Downloader, convert_mp4_to_ts, format_size, write_meta
 from download_manager import MagentaMusikDownloadManagerScreen
 
 # ------------------------------------------------------------------
@@ -1025,7 +1030,7 @@ def _bg_download_done(fp):
     if _catalog.get_download_convert_ts() and fp and fp.lower().endswith(".mp4"):
         if _active_downloader is not None:
             _active_downloader._converting = True
-        convert_mp4_to_ts(fp, on_done=lambda ts: _bg_convert_done(), on_error=lambda e: _queue_next())
+        convert_mp4_to_ts(fp, on_done=lambda ts: _bg_convert_done(), on_error=lambda e: _queue_error(str(e)))
     else:
         _queue_next()
 
@@ -1108,7 +1113,7 @@ def _queue_next_worker():
         dl.start()
     except Exception as e:
         _dbg("_queue_next Fehler: %s" % e)
-        _queue_next()
+        _queue_error(str(e))
 
 
 # Referenzzaehler statt einfachem Bool, da es bei uns (anders als OeMediathek
@@ -1282,6 +1287,12 @@ def _on_recording_finished(rec, *args):
         _dbg("Aufnahme-Fehler: %s - %s" % (rec.title, args[0]))
     else:
         _dbg("Aufnahme fertig: %s -> %s" % (rec.title, rec.filepath))
+        try:
+            import time
+            dur = int(time.time() - rec._started_at) if rec._started_at else 0
+        except Exception:
+            dur = 0
+        write_meta(rec.filepath, rec.title, duration=str(dur // 60) + ":" + str(dur % 60).zfill(2))
 
 
 def _cancel_recording(rec):
@@ -2348,6 +2359,9 @@ class _BrowseScreenBase(Screen):
 # ------------------------------------------------------------------
 # Ebene 1: Festival-Liste (+ "Jetzt live"-Eintrag)
 # ------------------------------------------------------------------
+_active_play_thread_running = False
+
+
 class MagentaMusikFestivalScreen(_BrowseScreenBase):
 
     def __init__(self, session):
@@ -2380,6 +2394,11 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
         self._play(item)
 
     def _play(self, item):
+        global _active_play_thread_running
+        if _active_play_thread_running:
+            print("[MagentaMusik] Already starting a stream, ignoring OK press.")
+            return
+        _active_play_thread_running = True
         raw_url = item["url"]
         self["status"].setText(_b("Lade…"))
         t = threading.Thread(target=self.__play_bg, args=(item, raw_url))
@@ -2387,6 +2406,7 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
         t.start()
 
     def __play_bg(self, item, raw_url):
+        global _active_play_thread_running
         from magentamusik import is_magentamusik as _is_mm, resolve as _resolve
         # Zusaetzliche Buehnen (siehe get_live_stages) liefern bereits eine
         # fertige .m3u8-Stream-URL direkt vom CDN, keine magentamusik.de-Seite
@@ -2395,38 +2415,39 @@ class MagentaMusikFestivalScreen(_BrowseScreenBase):
         # Hintergrundthread, sonst blockiert das den GUI-Thread (Lade-Spinner).
         try:
             url = _resolve(raw_url) if _is_mm(raw_url) else raw_url
-        except Exception:
-            url = None
+            # resolve_local_playlist() macht ebenfalls eine blockierende HTTP-
+            # Anfrage (HLS-Audio-Fix) - muss genau wie resolve() im
+            # Hintergrundthread laufen, sonst friert beim naechsten Netzwerk-
+            # Haenger der komplette Player (inkl. WebIF) ein.
+            url_str = user_agent = None
+            if url:
+                url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
 
-        # resolve_local_playlist() macht ebenfalls eine blockierende HTTP-
-        # Anfrage (HLS-Audio-Fix) - muss genau wie resolve() im
-        # Hintergrundthread laufen, sonst friert beim naechsten Netzwerk-
-        # Haenger der komplette Player (inkl. WebIF) ein.
-        url_str = user_agent = None
-        if url:
-            url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
-
-        def _apply():
-            if self._closed:
-                return
-            if not url_str:
+            def _apply():
+                global _active_play_thread_running
+                _active_play_thread_running = False
+                if self._closed:
+                    return
+                if not url_str:
+                    self._render()
+                    return
+                live_items = [it for it in self._items if it.get("type") != "folder"]
+                live_idx   = next((i for i, it in enumerate(live_items) if it is item), 0)
+                play_resolved_stream(
+                    self.session, url_str, title=item.get("name", "Live"), is_live=True,
+                    user_agent=user_agent,
+                    autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
+                    streams=live_items, stream_index=live_idx,
+                )
                 self._render()
-                return
-            live_items = [it for it in self._items if it.get("type") != "folder"]
-            live_idx   = next((i for i, it in enumerate(live_items) if it is item), 0)
-            play_resolved_stream(
-                self.session, url_str, title=item.get("name", "Live"), is_live=True,
-                user_agent=user_agent,
-                autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-                streams=live_items, stream_index=live_idx,
-            )
-            self._render()
 
-        try:
-            from twisted.internet import reactor
-            reactor.callFromThread(_apply)
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(_apply)
+            except Exception:
+                _apply()
         except Exception:
-            _apply()
+            _active_play_thread_running = False
 
 
 # ------------------------------------------------------------------
@@ -2452,50 +2473,57 @@ class MagentaMusikItemsScreen(_BrowseScreenBase):
         return out
 
     def _on_select_item(self, item, idx):
+        global _active_play_thread_running
+        if _active_play_thread_running:
+            print("[MagentaMusik] Already starting a stream, ignoring OK press.")
+            return
+        _active_play_thread_running = True
         self["status"].setText(_b("Lade…"))
         t = threading.Thread(target=self.__play_bg, args=(item, idx))
         t.daemon = True
         t.start()
 
     def __play_bg(self, item, idx):
+        global _active_play_thread_running
         from magentamusik import resolve as _resolve
         # resolve() macht bis zu 3 sequenzielle HTTP-Requests gegen
         # magentamusik.de - im Hintergrundthread, sonst blockiert das den
         # GUI-Thread beim Start jedes Konzerts (Lade-Spinner).
         try:
             url = _resolve(item["url"])
-        except Exception:
-            url = None
+            # VOD-Playlists von magentamusik.de muxen Audio zwar direkt in jede
+            # Bitrate-Variante (kein separater #EXT-X-MEDIA AUDIO-Track noetig),
+            # aber resolve_local_playlist() waehlt zusaetzlich die beste Variante
+            # vorab aus - ohne das muss exteplayer3 selbst per ABR aushandeln,
+            # was den Start um mehrere Sekunden verzoegert. Laeuft bereits im
+            # Hintergrundthread (s.o.), GUI-Freeze-Risiko besteht nicht mehr.
+            url_str = user_agent = None
+            if url:
+                url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
 
-        # VOD-Playlists von magentamusik.de muxen Audio zwar direkt in jede
-        # Bitrate-Variante (kein separater #EXT-X-MEDIA AUDIO-Track noetig),
-        # aber resolve_local_playlist() waehlt zusaetzlich die beste Variante
-        # vorab aus - ohne das muss exteplayer3 selbst per ABR aushandeln,
-        # was den Start um mehrere Sekunden verzoegert. Laeuft bereits im
-        # Hintergrundthread (s.o.), GUI-Freeze-Risiko besteht nicht mehr.
-        url_str = user_agent = None
-        if url:
-            url_str, user_agent = resolve_local_playlist(url, hls_audio_fix=True)
-
-        def _apply():
-            if self._closed:
-                return
-            if not url_str:
+            def _apply():
+                global _active_play_thread_running
+                _active_play_thread_running = False
+                if self._closed:
+                    return
+                if not url_str:
+                    self._render()
+                    return
+                play_resolved_stream(
+                    self.session, url_str, title=item.get("name", "Stream"), is_live=True,
+                    user_agent=user_agent,
+                    autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
+                    streams=self._items, stream_index=idx,
+                )
                 self._render()
-                return
-            play_resolved_stream(
-                self.session, url_str, title=item.get("name", "Stream"), is_live=True,
-                user_agent=user_agent,
-                autoconfigure_serviceapp=_get_setting("serviceapp_autoconfigure", True),
-                streams=self._items, stream_index=idx,
-            )
-            self._render()
 
-        try:
-            from twisted.internet import reactor
-            reactor.callFromThread(_apply)
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(_apply)
+            except Exception:
+                _apply()
         except Exception:
-            _apply()
+            _active_play_thread_running = False
 
     def _start_download(self, item):
         state = _enqueue_download(

@@ -120,15 +120,20 @@ def write_meta(filepath, title, description=None, duration=None):
                     dur_secs = int(parts[0]) * 60 + int(parts[1])
             except (ValueError, IndexError):
                 pass
+        title_str = _dec(title)
+        pts_len = dur_secs * 90000
         lines = [
-            u"",
-            display_name,
+            u"1:0:0:0:0:0:0:0:0:0:",
+            title_str if title_str else display_name,
             desc_str,
             str(ts),
             u"",
-            str(dur_secs) if dur_secs else u"",
+            str(pts_len) if pts_len else u"0",
+            u"0",
+            u"",
+            u"0",
         ]
-        with open(meta_path, "w") as f:
+        with open(meta_path, "wb") as f:
             f.write(u"\n".join(lines).encode("utf-8"))
     except Exception:
         pass
@@ -476,9 +481,6 @@ class Downloader(object):
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 proc.wait()
                 self._muxing = False
-                for p in (vid_tmp, aud_tmp):
-                    try: os.remove(p)
-                    except Exception: pass
                 if proc.returncode != 0:
                     err = proc.stderr.read()[-300:]
                     raise Exception("ffmpeg Mux Fehler (Code %d): %s" % (proc.returncode, err))
@@ -487,6 +489,10 @@ class Downloader(object):
             _log("HLS parallel fertig: %s" % fp)
         finally:
             keepalive.close_all()
+            for _p in (vid_tmp, aud_tmp):
+                if os.path.exists(_p):
+                    try: os.remove(_p)
+                    except Exception: pass
 
     def _download_m3u8(self, opener, url):
         """Sequenzieller Fallback (nur Video-/Single-Track-Segmente aneinanderhaengen)."""

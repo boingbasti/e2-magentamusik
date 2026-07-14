@@ -10,15 +10,15 @@ import time
 import uuid
 
 try:
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
-except Exception:
-    pass
-
-try:
     import urllib2 as _urlreq
 except ImportError:
     import urllib.request as _urlreq
+
+try:
+    import ssl as _ssl
+    _opener = _urlreq.build_opener(_urlreq.HTTPSHandler(context=_ssl._create_unverified_context()))
+except Exception:
+    _opener = None
 
 try:
     from html import unescape as _html_unescape          # Python 3
@@ -93,8 +93,8 @@ def _clear_error():
 # HTTP
 # ------------------------------------------------------------------
 def _fetch(url, timeout=10):
-    req  = _urlreq.Request(url, headers={"User-Agent": _UA})
-    resp = _urlreq.urlopen(req, timeout=timeout)
+    req = _urlreq.Request(url, headers={"User-Agent": _UA})
+    resp = (_opener.open(req, timeout=timeout) if _opener else _urlreq.urlopen(req, timeout=timeout))
     return resp.read()
 
 
@@ -184,7 +184,7 @@ _OG_IMAGE_FETCH_BYTES = 16384
 def _fetch_og_image(collection_url, timeout=8):
     try:
         req = _urlreq.Request(collection_url, headers={"User-Agent": _UA})
-        resp = _urlreq.urlopen(req, timeout=timeout)
+        resp = (_opener.open(req, timeout=timeout) if _opener else _urlreq.urlopen(req, timeout=timeout))
         chunk = resp.read(_OG_IMAGE_FETCH_BYTES).decode("utf-8", "replace")
         m = _OG_IMAGE_RE.search(chunk)
         return m.group(1) if m else None
@@ -210,8 +210,14 @@ def get_festivals(force_refresh=False):
     def _do_fetch():
         html_text = _fetch_text(HOME_URL)
         festivals = _parse_festivals(html_text)
-        for f in festivals:
+        def _load_image(f):
             f["image_url"] = _fetch_og_image(f["url"])
+        threads = [threading.Thread(target=_load_image, args=(f,)) for f in festivals]
+        for t in threads:
+            t.daemon = True
+            t.start()
+        for t in threads:
+            t.join()
         return festivals
     result = _cached_fetch(FESTIVALS_CACHE, TTL_FESTIVALS, _do_fetch, force_refresh)
     return result or []
