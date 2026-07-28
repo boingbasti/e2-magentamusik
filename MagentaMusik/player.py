@@ -22,8 +22,12 @@ except ImportError:
 _OFFLINE_VIDEO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "offline_stream.mp4")
 
 
-def _offline_ref():
-    return eServiceReference(4097, 0, _OFFLINE_VIDEO)
+def _offline_ref(name=""):
+    ref = eServiceReference(4097, 0, _OFFLINE_VIDEO)
+    if name:
+        title = (name + " (Offline)").encode("utf-8") if isinstance(name, type(u"")) else (name + b" (Offline)")
+        ref.setName(title)
+    return ref
 
 
 class MMStreamPlayer(MoviePlayer):
@@ -100,6 +104,10 @@ class MMStreamPlayer(MoviePlayer):
             if getattr(self, "_switch_token", 0) != token:
                 _dbg("apply skipped: newer zap token active (token=%d active=%d)" % (token, self._switch_token))
                 return
+            offline_call = getattr(self, "_offline_call", None)
+            if offline_call is not None and offline_call.active():
+                offline_call.cancel()
+            self._offline_call = None
             self._switching = False
             if self._closed:
                 return
@@ -126,11 +134,13 @@ class MMStreamPlayer(MoviePlayer):
             return
         if len(self._streams) > 1:
             self._showing_offline = True
+            stream_name = self._streams[self._stream_index].get("name", "") if self._streams else ""
             try:
                 from twisted.internet import reactor
-                reactor.callLater(0.5, self.session.nav.playService, _offline_ref())
+                self._offline_call = reactor.callLater(0.5, self.session.nav.playService, _offline_ref(stream_name))
             except Exception:
-                self.session.nav.playService(_offline_ref())
+                self._offline_call = None
+                self.session.nav.playService(_offline_ref(stream_name))
             return
         self.close()
 

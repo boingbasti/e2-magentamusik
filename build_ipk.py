@@ -31,6 +31,7 @@ Maintainer: {MAINTAINER}
 Homepage: {HOMEPAGE}
 Section: misc
 Priority: optional
+License: GPL-2.0
 Description: {DESCRIPTION}
 """.encode("utf-8")
 
