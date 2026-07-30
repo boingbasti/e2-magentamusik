@@ -9,5 +9,5 @@ __pycache__/
 # Laufzeit-Cache (heruntergeladene Cover, kein Quellmaterial)
 MagentaMusik/covers/
 
-# Lokale Claude-Code-Einstellungen
+# Lokale Editor-/Tool-Einstellungen
 .claude/
