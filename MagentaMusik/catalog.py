@@ -443,6 +443,42 @@ def _slot_is_fresh(slot, timeout=8):
         return False
 
 
+STAGE0_SLOT_CACHE = os.path.join(CACHE_DIR, "stage0_slot.json")
+
+
+def _stage0_slot(live_url, force_refresh=False):
+    """Loest Buehne 0 EINMAL wirklich auf (ueber den offiziellen
+    magentamusik.py-Resolver, keine Slot-Ratearei) und liefert den dabei
+    tatsaechlich verwendeten CDN-Slot-Namen (z.B. "mm002_hd"), damit die
+    Formel unten weiter unten keinen weiteren Buehnen-Button versehentlich
+    auf genau denselben Slot raet. Ergebnis kurz gecacht (selbe TTL wie
+    get_live_now), da resolve() bis zu 4 sequenzielle HTTP-Requests macht."""
+    def _do_fetch():
+        from magentamusik import resolve as _resolve
+        resolved = _resolve(live_url)
+        m = re.search(r"/bpk-tv/([a-z0-9_]+)/", resolved or "")
+        return m.group(1) if m else ""
+    slot = _cached_fetch(STAGE0_SLOT_CACHE, TTL_LIVE, _do_fetch, force_refresh)
+    return slot or None
+
+
+def _pick_stage_slot(stage_idx, used_slots):
+    """Bevorzugt weiterhin die bisherige Formel (stage_idx+1), probiert bei
+    einer Kollision mit einem schon vergebenen Slot oder fehlender Frische
+    aber benachbarte Slot-Nummern (naeher zuerst) statt blind aufzugeben."""
+    preferred = stage_idx + 1
+    for delta in (0, -1, 1, -2, 2):
+        num = preferred + delta
+        if num < 1 or num > _STAGE_SLOT_MAX_COUNT + 1:
+            continue
+        slot = "mm%03d_hd" % num
+        if slot in used_slots:
+            continue
+        if _slot_is_fresh(slot):
+            return slot
+    return None
+
+
 def get_live_stages(force_refresh=False):
     """Liefert alle aktuell aktiven Live-Buehnen als Liste (0, 1 oder mehrere
     Eintraege je {headline, url, is_live}). Buehne 0 nutzt immer die
@@ -461,6 +497,13 @@ def get_live_stages(force_refresh=False):
     if len(stage_buttons) <= 1:
         return [live]
 
+    # Beobachtet (Wacken 2026): Buehne 0 loeste real auf mm002_hd auf, obwohl
+    # die reine Index-Formel unten fuer Buehne-Index 1 ebenfalls mm002_hd
+    # geraten haette - sichtbare Folge waren zwei Eintraege mit identischem
+    # Stream statt zweier unterschiedlicher Buehnen. used_slots verhindert das.
+    stage0 = _stage0_slot(live["url"], force_refresh)
+    used_slots = set([stage0]) if stage0 else set()
+
     result = []
     for label, _href, stage_idx_str in stage_buttons[:_STAGE_SLOT_MAX_COUNT]:
         stage_idx = int(stage_idx_str)
@@ -472,8 +515,9 @@ def get_live_stages(force_refresh=False):
                 "is_live":  True,
             })
             continue
-        slot = "mm%03d_hd" % (stage_idx + 1)
-        if _slot_is_fresh(slot):
+        slot = _pick_stage_slot(stage_idx, used_slots)
+        if slot:
+            used_slots.add(slot)
             result.append({
                 "headline": "%s – %s" % (live["headline"], label),
                 "url":      _STAGE_SLOT_URL_FMT % slot,
